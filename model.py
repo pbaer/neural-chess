@@ -22,13 +22,19 @@ def compile_model(model):
                   metrics=['accuracy'])
 
 def load_model(filename):
-    if not ('/' in filename):
-        filename = 'model/' + filename # assume relative path to source
-    with open(filename + '.json', 'r') as json_file:
+    if filename.endswith('.json'):
+        json_filename = filename
+        h5_filename = filename[:-5] + '.h5'
+    else: # assume local filename root only
+        json_filename = 'model/' + filename + '.json'
+        h5_filename = 'model/' + filename + '.h5'
+    json_filename.replace('\\', '/');
+    h5_filename.replace('\\', '/');
+    with open(json_filename, 'r') as json_file:
         model_json = json_file.read()
         json_file.close()
     model = keras.models.model_from_json(model_json)
-    model.load_weights(filename + '.h5')
+    model.load_weights(h5_filename)
     compile_model(model)
     return model
 

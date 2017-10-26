@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import chess
 import sys
 from model import load_model
