@@ -21,9 +21,9 @@ Make sure these Python prerequisites are installed:
 
 You can get a trained model by downloading these two files into the same directory:
 
-https://alpenglow.blob.core.windows.net/neural-chess/modelB3.json
+https://alpenglow.blob.core.windows.net/neural-chess/model/modelB3.json
 
-https://alpenglow.blob.core.windows.net/neural-chess/modelB3.h5
+https://alpenglow.blob.core.windows.net/neural-chess/model/modelB3.h5
 
 ## Play
 
