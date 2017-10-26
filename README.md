@@ -31,10 +31,9 @@ To try out interactive play, I recommend using Arena (http://www.playwitharena.c
 
 1. Select **Engines | Manage**
 2. Select **New**
-3. Set **Command Line** to the location of `python.exe`
+3. Browse to the location of `python.exe`
 4. Set **Command Line Parameters** to `<your repo root dir>\neural-chess\uci.py <path to the model JSON file>`
-5. Select Ok to close the dialog
-6. Select **Engines | Engine 1 | Start** and give it a few seconds to load up (the little gray computer icon in the lower-left area should turn black)
+5. Select **Start this engine right now** and give it a few seconds to load up (the little gray computer icon below the board should turn black)
 7. Start a new game and **let the engine play white** (er, I only trained it on white. I should fix that). You do this by selecting **Game | Move Now!** to let it go first.
 8. Subsequently, the engine will automatically move white after you move black.
 
