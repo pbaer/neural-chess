@@ -1,7 +1,7 @@
 # neural-chess
 
 This is a simple chess engine that uses a neural network trained on historical games from the http://chessgames.com database.
-It has not been taught anything about how to play chess, other than using a python chess library to prevent it from making illegal moves
+It has not been taught anything about how to play chess or how to evaluate board positions. It does not look ahead to explore the consequences of possible moves. It only uses an existing chess library to prevent it from making illegal moves
 (if it's about to attempt an illegal move, it keeps examining its next-best guess for that board position until it finds a legal move;
 currently, about 70% of its move attempts are legal).
 
