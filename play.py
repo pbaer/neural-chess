@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import chess
 import matplotlib.pyplot as plt
 import numpy as np
@@ -99,7 +98,7 @@ def play_engine(model, engine, limit=1):
         board = chess.Board()
         engine.newgame()
         game_node = chess.pgn.Game()
-        game_node.headers['White'] = 'Neural Network Model'
+        game_node.headers['White'] = 'Neural-Chess'
         game_node.headers['Black'] = 'Stockfish'
         while True:
             if board.is_game_over():
@@ -121,7 +120,7 @@ def play_engine(model, engine, limit=1):
                        stats['results']['1/2-1/2']))
                 break
             if board.turn:
-                move = generate_model_move(model, board)
+                move = generate_model_move(model, board, stats)
             else:
                 move = generate_engine_move(engine, board)
             board.push(move)
