@@ -36,7 +36,7 @@ To try out interactive play, I recommend using Arena (http://www.playwitharena.c
 5. Start a new game and **let the engine play white** (er, I only trained it on white. I should fix that). You do this by selecting **Game | Move Now!** to let it go first.
 6. Subsequently, the engine will automatically move white after you move black.
 
-## Engine Comparison
+## Engine vs. Engine
 
 To play repeatedly against a real chess engine, tweak `test.py` with the correct model file location and desired number of games:
 
