@@ -5,7 +5,7 @@ It has not been taught anything about how to play chess or how to evaluate board
 (if it's about to attempt an illegal move, it keeps examining its next-best guess for that board position until it finds a legal move;
 currently, about 70% of its move attempts are legal).
 
-The model uses a three fully-connected hidden layers with 2,000 nodes per layer. The input is the board position and the output
+The model uses three fully-connected hidden layers with 2,000 nodes per layer. The input is the board position and the output
 is the predicted move, based on observing board + move pairs by winning players in the historical game database.
 
 Against Stockfish (a popular chess engine), on its most rudimentary setting (depth=0, skill=0), the model wins about
