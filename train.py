@@ -23,12 +23,15 @@ class TrainingSet():
 
     def add_from_file(self, filename):
         data = np.load('data/' + filename)
+        data_rows = data['meta'][0]
+        if (self.rows + data_rows > self.max_rows)
+            return False
         data_X = data['X']
         data_Y = data['Y']
-        data_rows = data['meta'][0]
         self.X[self.rows:(self.rows + data_rows),:] = data_X[0:data_rows,:]
         self.Y[self.rows:(self.rows + data_rows),:] = data_Y[0:data_rows,:]
         self.rows += data_rows
+        return True
 
     def add_row(self, x, y):
         if self.is_full():
