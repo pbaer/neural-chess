@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import os
-from model import load_model
-from model import save_model 
 
 class TrainingSet():
     FEATURES = 6 * 8 * 8 # 6 unique piece types each on an 8x8 integer board; 1 for white, -1 for black
@@ -14,6 +12,9 @@ class TrainingSet():
         self.rows = 0
         self.max_rows = max_rows
         
+    def reset(self):
+        self.rows = 0
+
     def get(self):
         return self.X[0:self.rows,:], self.Y[0:self.rows,:]
 
@@ -40,7 +41,7 @@ class TrainingSet():
     def save_to_file(self, filename):
         meta = np.ndarray((1), dtype=int)
         meta[0] = self.rows
-        np.savez_compressed('data/' + filename, X=self.X, Y=self.Y, meta=meta)
+        np.savez_compressed('data/' + filename, X=self.X[0:self.rows,:], Y=self.Y[0:self.rows,:], meta=meta)
 
 def train(model):
     train = TrainingSet(3600000)
