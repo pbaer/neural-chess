@@ -16,7 +16,7 @@ WHITE = True
 BLACK = False
 
 def parse_training_set():
-    training_set = TrainingSet(2000000) # more than we need for any single .PGN
+    training_set = TrainingSet(4000000) # more than we need for any single .PGN
     for filename in os.listdir('data'):
         if not filename.endswith('.PGN'):
             continue

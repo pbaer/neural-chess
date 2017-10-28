@@ -49,3 +49,14 @@ def train(model):
     train_X, train_Y = train.get()
     while os.path.isfile('.stop') == False:
         model.fit(train_X, train_Y, batch_size=50000, epochs=1)
+        
+def count_rows():
+    total_rows = 0
+    for filename in os.listdir('data'):
+        if not filename.endswith('.npz'):
+            continue
+        data = np.load('data/' + filename)
+        data_rows = data['meta'][0]
+        print("%d rows in %s" % (data_rows, filename))
+        total_rows += data_rows
+    print("%d total rows (%.2fGB expanded)" % (total_rows, (float(total_rows) * (384 + 4096))/(1024 * 1024 * 1024)))
