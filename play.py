@@ -2,9 +2,12 @@
 import chess
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 #import random
+import sys
 import time
 from parse import featurize_board
+from model import load_model
 
 #CONFIDENCE_BIAS = 5
 
@@ -46,7 +49,7 @@ def print_stats(stats, prefix=''):
 
 def generate_model_move(model, board, stats, show_output=False):
     assert board.turn # Must be White's turn
-    y = model.predict(featurize_board(board.fen())).reshape((64, 64))
+    y = model.predict(featurize_board(board.fen(), rotate=False)).reshape((64, 64))
     if show_output:
         plt.imshow(y, cmap='Greys')
     #remaining_confidence = 1
@@ -111,13 +114,12 @@ def play_engine(model, engine, limit=1):
                     stats['end_states'][end_state] = 1
                 if board.result() == '1-0':
                     stats['won_games'].append(str(game_node.root()))
-                if board.result() == '1/2-1/2':
+                    sys.stdout.write('X')
+                elif board.result() == '1/2-1/2':
                     stats['draw_games'].append(str(game_node.root()))
-                print("Game %d: %s (%d wins, %d draws)" %
-                      (stats['games'],
-                       board.result(),
-                       stats['results']['1-0'],
-                       stats['results']['1/2-1/2']))
+                    sys.stdout.write('-')
+                else:
+                    sys.stdout.write('.')
                 break
             if board.turn:
                 move = generate_model_move(model, board, stats)
@@ -130,3 +132,22 @@ def play_engine(model, engine, limit=1):
     stats['minutes_elapsed'] += (time.time() - start_time)/60
     print()
     print_stats(stats)
+    return stats
+
+def play_engine_forever(model_filename_root, engine, limit):
+    last_model_filename = None
+    while os.path.isfile('.stopplay') == False:
+        model_filename = None
+        for filename in os.listdir('model'):
+            if not filename.startswith(model_filename_root) or not filename.endswith('.json'):
+                continue
+            model_filename = filename
+        if model_filename == None or model_filename == last_model_filename:
+            time.sleep(5)
+            continue
+        model = load_model('model/' + model_filename)
+        print()
+        print("Playing %s..." % model_filename)
+        play_engine(model, engine, limit)
+        last_model_filename = model_filename
+    os.remove('.stopplay')

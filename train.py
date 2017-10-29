@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import os
+from model import save_model
 
 class TrainingSet():
     FEATURES = 6 * 8 * 8 # 6 unique piece types each on an 8x8 integer board; 1 for white, -1 for black
@@ -22,9 +23,12 @@ class TrainingSet():
         return self.rows == self.max_rows
 
     def add_from_file(self, filename):
-        data = np.load('data/' + filename)
+        data = np.load(filename)
+        return self.add_from_data(data)
+
+    def add_from_data(self, data):
         data_rows = data['meta'][0]
-        if (self.rows + data_rows > self.max_rows)
+        if (self.rows + data_rows > self.max_rows):
             return False
         data_X = data['X']
         data_Y = data['Y']
@@ -32,6 +36,23 @@ class TrainingSet():
         self.Y[self.rows:(self.rows + data_rows),:] = data_Y[0:data_rows,:]
         self.rows += data_rows
         return True
+
+    def add_from_folder(self, foldername, printonly=False):
+        total_rows = 0
+        for filename in os.listdir(foldername):
+            if not filename.endswith('.npz'):
+                continue
+            data = np.load(foldername + '/' + filename)
+            data_rows = data['meta'][0]
+            print("%d rows in %s" % (data_rows, filename))
+            total_rows += data_rows
+            if printonly:
+                continue
+            if not self.add_from_data(data):
+                total_rows -= data_rows
+                print("Training set full, not adding this file.")
+                break
+        print("%d total rows (%.2fGB expanded)" % (total_rows, (float(total_rows) * (self.FEATURES + self.OUTPUTS))/(1024 * 1024 * 1024)))
 
     def add_row(self, x, y):
         if self.is_full():
@@ -46,20 +67,13 @@ class TrainingSet():
         meta[0] = self.rows
         np.savez_compressed('data/' + filename, X=self.X[0:self.rows,:], Y=self.Y[0:self.rows,:], meta=meta)
 
-def train(model):
-    train = TrainingSet(3600000)
-    train.add_from_file('training_set_0000-1999.npz')
-    train_X, train_Y = train.get()
+def train_forever(model, training_set, save_filename, start_epoch):
+#    train = TrainingSet(3600000)
+#    train.add_from_file('training_set_0000-1999.npz')
+    epoch = start_epoch
+    train_X, train_Y = training_set.get()
     while os.path.isfile('.stop') == False:
-        model.fit(train_X, train_Y, batch_size=50000, epochs=1)
-        
-def count_rows():
-    total_rows = 0
-    for filename in os.listdir('data'):
-        if not filename.endswith('.npz'):
-            continue
-        data = np.load('data/' + filename)
-        data_rows = data['meta'][0]
-        print("%d rows in %s" % (data_rows, filename))
-        total_rows += data_rows
-    print("%d total rows (%.2fGB expanded)" % (total_rows, (float(total_rows) * (384 + 4096))/(1024 * 1024 * 1024)))
+        model.fit(train_X, train_Y, batch_size=10000, epochs=1)
+        save_model(model, save_filename + '_e' + ("%04d" % epoch))
+        epoch += 1
+    os.remove('.stop')

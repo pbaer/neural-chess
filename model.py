@@ -1,15 +1,23 @@
 # -*- coding: utf-8 -*-
 import keras
-from keras.models import Sequential
+from keras.backend.tensorflow_backend import set_session
 from keras.layers import Dense, Activation
+from keras.models import Sequential
+import tensorflow as tf
+
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 0.4
+set_session(tf.Session(config=config))
 
 def create_model():
     model = Sequential([
-        Dense(2000, input_shape=(384,)),
+        Dense(3000, input_shape=(384,)),
         Activation('relu'),
-        Dense(2000),
+        Dense(3000),
         Activation('relu'),
-        Dense(2000),
+        Dense(3000),
+        Activation('relu'),
+        Dense(3000),
         Activation('relu'),
         Dense(4096),
         Activation('softmax')])

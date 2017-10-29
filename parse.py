@@ -58,7 +58,7 @@ def parse_turn(board_fen, move, rotate):
     y = outputize_move(move, rotate)
     return x, y
 
-def featurize_board(board_fen, rotate):
+def featurize_board(board_fen, rotate=False):
     board_array = np.zeros((6, 8, 8), dtype='int8')
     f = -1 # file (column)
     r = 0 # rank (row)
