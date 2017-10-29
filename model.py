@@ -7,6 +7,7 @@ from keras.layers import Dense, Activation
 from keras.models import Sequential
 import os
 import tensorflow as tf
+import time
 
 # Use this to prevent 100% GPU memory usage
 #config = tf.ConfigProto()
@@ -105,3 +106,10 @@ def synchronize_blob_models(blob_service):
         if remote not in local_models:
             print("Downloading %s..." % remote)
             download_blob_model(blob_service, remote)
+
+def synchronize_blob_models_forever():
+    blob_service = create_blob_service()
+    while os.path.isfile('.stopsync') == False:
+        synchronize_blob_models(blob_service)
+        time.sleep(30)
+    os.remove('.stopsync')
