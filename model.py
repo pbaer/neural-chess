@@ -87,13 +87,13 @@ def enumerate_remote_models(blob_service, filename_root=''):
 
 def upload_blob_model(blob_service, json_filename):
     h5_filename = json_filename[:-5] + '.h5'
-    blob_service.create_blob_from_path('neural-chess', json_filename, json_filename, content_settings=ContentSettings(content_type='application/json'))
     blob_service.create_blob_from_path('neural-chess', h5_filename, h5_filename, content_settings=ContentSettings(content_type='application/octet-stream'))
+    blob_service.create_blob_from_path('neural-chess', json_filename, json_filename, content_settings=ContentSettings(content_type='application/json'))
 
 def download_blob_model(blob_service, json_filename):
     h5_filename = json_filename[:-5] + '.h5'
-    blob_service.get_blob_to_path('neural-chess', json_filename, json_filename)
     blob_service.get_blob_to_path('neural-chess', h5_filename, h5_filename)
+    blob_service.get_blob_to_path('neural-chess', json_filename, json_filename)
 
 def synchronize_blob_models(blob_service):
     local_models = enumerate_local_models()
