@@ -71,14 +71,15 @@ def print_stats(stats, prefix=''):
 
 def init_stats_logfile(filename):
     with open(filename, 'w') as logfile:
-        logfile.write("model\tillegal_move_pct\twon_pct\tdraw_pct\tlost_pct\r\n")
+        logfile.write("model\tgames\tillegal_move_pct\twon_pct\tdraw_pct\tlost_pct\n")
 
 def print_stats_to_logfile(model_filename, stats, filename):
     moves = stats['legal_moves'] + stats['illegal_moves']
     games = stats['games']
     with open(filename, 'a') as logfile:
-        logfile.write("%s\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\r\n" %
+        logfile.write("%s\t%d\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\n" %
                       (model_filename,
+                       games,
                        100 * stats['illegal_moves']/moves,
                        100 * stats['results']['1-0']/games,
                        100 * stats['results']['1/2-1/2']/games,
@@ -131,11 +132,7 @@ def play_interactive(model, board, move_uci=None):
     board.push(generate_model_move(model, board, init_stats(), show_output=True))
     return board
 
-# See https://github.com/fchollet/keras/issues/2397
-graph = None
-
-def play_engine(model, limit=10):
-    global graph
+def play_engine(model, graph, limit=10000):
     stats = init_stats()
     start_time = time.time()
     with graph.as_default():
@@ -177,34 +174,34 @@ def play_engine(model, limit=10):
     return stats
 
 def play_engine_forever(model_filename_root, last_model_filename=None):
-    global graph
-    thread_pool = ThreadPool(4)
     while os.path.isfile('.stopplay') == False:
         model_filename = None
-        seen_last_model_filename = False
+        play_next_model = (last_model_filename == None)
         for filename in os.listdir('model'):
             if not filename.startswith(model_filename_root) or not filename.endswith('.json'):
                 continue
-            if filename == last_model_filename:
-                seen_last_model_filename = True
-                continue
-            if seen_last_model_filename:
+            if play_next_model:
                 model_filename = filename # This is the first file after the last one we played
                 break
+            if filename == last_model_filename:
+                play_next_model = True
         if model_filename == None:
             time.sleep(5)
             continue
         model = load_model('model/' + model_filename)
         print()
         print("Playing %s..." % model_filename)
-        model._make_predict_function() # have to initialize before threading
-        graph = tf.get_default_graph()
+        model._make_predict_function() # Have to initialize before threading
+        graph = tf.get_default_graph() # See https://github.com/fchollet/keras/issues/2397
         # TODO: for some reason the above doesn't actually work, it seems the predict
-        # function is regenerated during thread execution anyway
-        #all_stats = thread_pool.map(play_engine, [model, model, model, model])
-        stats = play_engine(model, 1000)
+        # function is regenerated during thread execution anyway... hence only launching one thread here
+        thread_pool = ThreadPool(4)
+        all_stats = thread_pool.starmap(play_engine, [(model, graph)])
+        thread_pool.close()
+        thread_pool.join()
+        stats = merge_stats(all_stats)
+        #stats = play_engine(model, 1000)
         print()
-        #stats = merge_stats(all_stats)
         print_stats(stats)
         print_stats_to_logfile(model_filename, stats, '.playstats.txt')
         last_model_filename = model_filename
