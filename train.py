@@ -67,13 +67,13 @@ class TrainingSet():
         meta[0] = self.rows
         np.savez_compressed('data/' + filename, X=self.X[0:self.rows,:], Y=self.Y[0:self.rows,:], meta=meta)
 
-def train_forever(model, training_set, save_filename, start_epoch):
+def train_forever(model, training_set, save_filename, start_epoch, batch_size=10000):
 #    train = TrainingSet(3600000)
 #    train.add_from_file('training_set_0000-1999.npz')
     epoch = start_epoch
     train_X, train_Y = training_set.get()
     while os.path.isfile('.stop') == False:
-        model.fit(train_X, train_Y, batch_size=10000, epochs=1)
+        model.fit(train_X, train_Y, batch_size=batch_size, epochs=1)
         save_model(model, save_filename + '_e' + ("%04d" % epoch))
         epoch += 1
     os.remove('.stop')

@@ -132,43 +132,42 @@ def play_interactive(model, board, move_uci=None):
     board.push(generate_model_move(model, board, init_stats(), show_output=True))
     return board
 
-def play_engine(model, graph, limit=10000):
+def play_engine(model, limit=10000):
     stats = init_stats()
     start_time = time.time()
-    with graph.as_default():
-        with Stockfish(depth=0, param={'Skill Level':0}) as engine:
-            while limit > 0:
-                board = chess.Board()
-                engine.newgame()
-                game_node = chess.pgn.Game()
-                game_node.headers['White'] = 'Neural-Chess'
-                game_node.headers['Black'] = 'Stockfish'
-                while True:
-                    if board.is_game_over():
-                        stats['games'] += 1
-                        stats['results'][board.result()] += 1
-                        #end_state = board.fen().split()[0] # Only consider the board itself, not castling rights, turn count etc.
-                        #if end_state in stats['end_states']:
-                        #    stats['end_states'][end_state] += 1
-                        #else:
-                        #    stats['end_states'][end_state] = 1
-                        if board.result() == '1-0':
-                            #stats['won_games'].append(str(game_node.root()))
-                            sys.stdout.write('X')
-                        elif board.result() == '1/2-1/2':
-                            #stats['draw_games'].append(str(game_node.root()))
-                            sys.stdout.write('-')
-                        else:
-                            sys.stdout.write('.')
-                        break
-                    if board.turn:
-                        move = generate_model_move(model, board, stats)
+    with Stockfish(depth=0, param={'Skill Level':0}) as engine:
+        while limit > 0:
+            board = chess.Board()
+            engine.newgame()
+            game_node = chess.pgn.Game()
+            game_node.headers['White'] = 'Neural-Chess'
+            game_node.headers['Black'] = 'Stockfish'
+            while True:
+                if board.is_game_over():
+                    stats['games'] += 1
+                    stats['results'][board.result()] += 1
+                    #end_state = board.fen().split()[0] # Only consider the board itself, not castling rights, turn count etc.
+                    #if end_state in stats['end_states']:
+                    #    stats['end_states'][end_state] += 1
+                    #else:
+                    #    stats['end_states'][end_state] = 1
+                    if board.result() == '1-0':
+                        #stats['won_games'].append(str(game_node.root()))
+                        sys.stdout.write('X')
+                    elif board.result() == '1/2-1/2':
+                        #stats['draw_games'].append(str(game_node.root()))
+                        sys.stdout.write('-')
                     else:
-                        move = generate_engine_move(engine, board)
-                    board.push(move)
-                    game_node = game_node.add_main_variation(move)
-                    stats['turns'] += 1
-                limit -= 1
+                        sys.stdout.write('.')
+                    break
+                if board.turn:
+                    move = generate_model_move(model, board, stats)
+                else:
+                    move = generate_engine_move(engine, board)
+                board.push(move)
+                game_node = game_node.add_main_variation(move)
+                stats['turns'] += 1
+            limit -= 1
     stats['minutes_elapsed'] += (time.time() - start_time)/60
     sys.stdout.write('!')
     return stats
@@ -191,18 +190,24 @@ def play_engine_forever(model_filename_root, last_model_filename=None):
         model = load_model('model/' + model_filename)
         print()
         print("Playing %s..." % model_filename)
-        model._make_predict_function() # Have to initialize before threading
-        graph = tf.get_default_graph() # See https://github.com/fchollet/keras/issues/2397
-        # TODO: for some reason the above doesn't actually work, it seems the predict
-        # function is regenerated during thread execution anyway... hence only launching one thread here
-        thread_pool = ThreadPool(4)
-        all_stats = thread_pool.starmap(play_engine, [(model, graph)])
-        thread_pool.close()
-        thread_pool.join()
-        stats = merge_stats(all_stats)
-        #stats = play_engine(model, 1000)
+        stats = play_engine(model, 1000)
         print()
         print_stats(stats)
         print_stats_to_logfile(model_filename, stats, '.playstats.txt')
         last_model_filename = model_filename
     os.remove('.stopplay')
+    
+def multithreaded_play_engine_core_that_does_not_work_yet(model):
+    # TODO: for some reason this doesn't actually work, it seems the predict
+    # function is regenerated during thread execution anyway...
+    model._make_predict_function() # Have to initialize before threading
+    graph = tf.get_default_graph() # See https://github.com/fchollet/keras/issues/2397
+    thread_pool = ThreadPool(4)
+    all_stats = thread_pool.starmap(play_engine, [(model, graph)])
+        # Note, inside of play_engine, do the following to set the thread
+        # context to the correct graph
+        #with graph.as_default():
+    thread_pool.close()
+    thread_pool.join()
+    stats = merge_stats(all_stats)
+    return stats
