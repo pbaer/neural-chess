@@ -14,7 +14,7 @@ Against Stockfish (a popular chess engine), on its most rudimentary setting (dep
 
 Make sure these Python prerequisites are installed:
 
-`pip install tensorflow keras python-chess`
+`pip install tensorflow keras python-chess azure-storage-blob`
 
 You can get a trained model by downloading these two files into the same directory:
 
