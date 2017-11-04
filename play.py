@@ -139,77 +139,77 @@ def play_interactive(model, board, move_uci=None):
     board.push(generate_model_move(model, board, init_stats(), show_output=True))
     return board
 
-def play_engine(model, limit=10000):
+def play_engine(model, engine, limit=10000):
     stats = init_stats()
     start_time = time.time()
     model_turn_time = 0
     engine_turn_time = 0
-    with Stockfish(depth=0, param={'Skill Level':0}) as engine:
-        while limit > 0:
-            board = chess.Board()
-            engine.newgame()
-            game_node = chess.pgn.Game()
-            game_node.headers['White'] = 'Neural-Chess'
-            game_node.headers['Black'] = 'Stockfish'
-            while True:
-                if board.is_game_over():
-                    stats['games'] += 1
-                    stats['results'][board.result()] += 1
-                    #end_state = board.fen().split()[0] # Only consider the board itself, not castling rights, turn count etc.
-                    #if end_state in stats['end_states']:
-                    #    stats['end_states'][end_state] += 1
-                    #else:
-                    #    stats['end_states'][end_state] = 1
-                    if board.result() == '1-0':
-                        #stats['won_games'].append(str(game_node.root()))
-                        sys.stdout.write('X')
-                    elif board.result() == '1/2-1/2':
-                        #stats['draw_games'].append(str(game_node.root()))
-                        sys.stdout.write('-')
-                    else:
-                        sys.stdout.write('.')
-                    break
-                turn_start_time = time.time()
-                if board.turn:
-                    move = generate_model_move(model, board, stats)
-                    model_turn_time += time.time() - turn_start_time
+    while limit > 0:
+        board = chess.Board()
+        engine.newgame()
+        game_node = chess.pgn.Game()
+        game_node.headers['White'] = 'Neural-Chess'
+        game_node.headers['Black'] = 'Stockfish'
+        while True:
+            if board.is_game_over():
+                stats['games'] += 1
+                stats['results'][board.result()] += 1
+                #end_state = board.fen().split()[0] # Only consider the board itself, not castling rights, turn count etc.
+                #if end_state in stats['end_states']:
+                #    stats['end_states'][end_state] += 1
+                #else:
+                #    stats['end_states'][end_state] = 1
+                if board.result() == '1-0':
+                    #stats['won_games'].append(str(game_node.root()))
+                    sys.stdout.write('X')
+                elif board.result() == '1/2-1/2':
+                    #stats['draw_games'].append(str(game_node.root()))
+                    sys.stdout.write('-')
                 else:
-                    move = generate_engine_move(engine, board)
-                    engine_turn_time += time.time() - turn_start_time
-                board.push(move)
-                game_node = game_node.add_main_variation(move)
-                stats['turns'] += 1
-            limit -= 1
+                    sys.stdout.write('.')
+                break
+            turn_start_time = time.time()
+            if board.turn:
+                move = generate_model_move(model, board, stats)
+                model_turn_time += time.time() - turn_start_time
+            else:
+                move = generate_engine_move(engine, board)
+                engine_turn_time += time.time() - turn_start_time
+            board.push(move)
+            game_node = game_node.add_main_variation(move)
+            stats['turns'] += 1
+        limit -= 1
     stats['minutes_elapsed'] += (time.time() - start_time)/60
     stats['model_minutes_elapsed'] += model_turn_time/60
     stats['engine_minutes_elapsed'] += engine_turn_time/60
-    sys.stdout.write('!')
+    print()
     return stats
 
 def play_engine_forever(model_filename_root, last_model_filename=None):
-    while os.path.isfile('.stopplay') == False:
-        model_filename = None
-        play_next_model = (last_model_filename == None)
-        for filename in os.listdir('model'):
-            if not filename.startswith(model_filename_root) or not filename.endswith('.json'):
+    with Stockfish(depth=0, param={'Skill Level':0}) as engine:
+        while os.path.isfile('.stopplay') == False:
+            model_filename = None
+            play_next_model = (last_model_filename == None)
+            for filename in os.listdir('model'):
+                if not filename.startswith(model_filename_root) or not filename.endswith('.json'):
+                    continue
+                if play_next_model:
+                    model_filename = filename # This is the first file after the last one we played
+                    break
+                if filename == last_model_filename:
+                    play_next_model = True
+            if model_filename == None:
+                time.sleep(5)
                 continue
-            if play_next_model:
-                model_filename = filename # This is the first file after the last one we played
-                break
-            if filename == last_model_filename:
-                play_next_model = True
-        if model_filename == None:
-            time.sleep(5)
-            continue
-        model = load_model('model/' + model_filename)
-        print()
-        print("Playing %s..." % model_filename)
-        stats = play_engine(model, 1000)
-        print()
-        print_stats(stats)
-        print_stats_to_logfile(model_filename, stats, '.playstats.txt')
-        last_model_filename = model_filename
-    os.remove('.stopplay')
+            model = load_model('model/' + model_filename)
+            print()
+            print("Playing %s..." % model_filename)
+            stats = play_engine(model, engine, 1000)
+            print()
+            print_stats(stats)
+            print_stats_to_logfile(model_filename, stats, '.playstats.txt')
+            last_model_filename = model_filename
+        os.remove('.stopplay')
     
 def multithreaded_play_engine_core_that_does_not_work_yet(model):
     # TODO: for some reason this doesn't actually work, it seems the predict

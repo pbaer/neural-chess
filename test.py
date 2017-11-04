@@ -5,7 +5,7 @@ from play import play_engine
 from play import print_stats
 import tensorflow as tf
 
-model = load_model('modelD_e0027')
-stats = play_engine(model, 10)
-print()
+model = load_model('modelDb_e0037')
+engine = Stockfish(depth=0, param={'Skill Level':0})
+stats = play_engine(model, engine, 10)
 print_stats(stats)
