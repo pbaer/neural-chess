@@ -26,6 +26,8 @@ def init_stats():
     stats['results']['1/2-1/2'] = 0
     #stats['end_states'] = {} # Skip tracking unique end states (TODO: add this back as an option)
     stats['minutes_elapsed'] = 0
+    stats['model_minutes_elapsed'] = 0
+    stats['engine_minutes_elapsed'] = 0
     #stats['won_games'] = [] # Skip tracking won/draw games (TODO: add this back as an option)
     #stats['draw_games'] = []
     stats['en_passant_captures'] = 0
@@ -59,7 +61,12 @@ def print_intragame_stats(stats, prefix=''):
 
 def print_stats(stats, prefix=''):
     games = stats['games']
-    print(prefix + ("%.1f minutes (%.2f seconds per game)" % (stats['minutes_elapsed'], 60 * stats['minutes_elapsed']/games)))
+    print(prefix + ("%.1f minutes (%.2f seconds per game, %.2f%% model turn time, %.2f%% engine turn time, %.2f%% overhead)" % 
+                    (stats['minutes_elapsed'],
+                     60 * stats['minutes_elapsed']/games,
+                     100 * stats['model_minutes_elapsed']/stats['minutes_elapsed'],
+                     100 * stats['engine_minutes_elapsed']/stats['minutes_elapsed'],
+                     100 * (stats['minutes_elapsed'] - stats['model_minutes_elapsed'] - stats['engine_minutes_elapsed'])/stats['engine_minutes_elapsed'])))                     
     print_intragame_stats(stats, prefix)
     print(prefix + ("%d turns (%.1f per game)" % (stats['turns'], stats['turns']/games)))
     print(prefix + ("%d games (%.2f%% won, %.2f%% draw, %.2f%% lost)" %
@@ -135,6 +142,8 @@ def play_interactive(model, board, move_uci=None):
 def play_engine(model, limit=10000):
     stats = init_stats()
     start_time = time.time()
+    model_turn_time = 0
+    engine_turn_time = 0
     with Stockfish(depth=0, param={'Skill Level':0}) as engine:
         while limit > 0:
             board = chess.Board()
@@ -160,15 +169,20 @@ def play_engine(model, limit=10000):
                     else:
                         sys.stdout.write('.')
                     break
+                turn_start_time = time.time()
                 if board.turn:
                     move = generate_model_move(model, board, stats)
+                    model_turn_time += time.time() - turn_start_time
                 else:
                     move = generate_engine_move(engine, board)
+                    engine_turn_time += time.time() - turn_start_time
                 board.push(move)
                 game_node = game_node.add_main_variation(move)
                 stats['turns'] += 1
             limit -= 1
     stats['minutes_elapsed'] += (time.time() - start_time)/60
+    stats['model_minutes_elapsed'] += model_turn_time/60
+    stats['engine_minutes_elapsed'] += engine_turn_time/60
     sys.stdout.write('!')
     return stats
 
