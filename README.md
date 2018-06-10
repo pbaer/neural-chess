@@ -5,7 +5,7 @@ This is a simple chess engine that uses a neural network trained on 23 million b
 The model uses four fully-connected hidden layers with 3,000 nodes per layer. The input is the board position and the output
 is the predicted move, based on observing board + move pairs by winning players in the game database.
 
-Against Stockfish (a popular chess engine), on its most rudimentary setting (depth=0, skill=0), the model wins about 4.6% of games (and draws 16.1% of games). Yes, **it's really quite terrible** by modern chess engine standards. But it seems to hold its own against novice human players (i.e. me) and I was pleasantly surprised it is ever able to win against a real chess engine at all, considering that it has learned everything about how to play by itself.
+Against Stockfish (a popular chess engine), on its most rudimentary setting (depth=0, skill=0), the model wins about 4.6% of games (and draws 16.1% of games). Yes, **it's really quite terrible** by modern chess engine standards. But it seems to hold its own against novice human players (i.e. me) and I was pleasantly surprised it is ever able to win against a real chess engine at all, considering that it has learned everything about how to play by itself!
 
 ## Setup
 
