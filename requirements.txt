@@ -1,0 +1,4 @@
+torch>=2.2.0
+python-chess>=1.10
+numpy>=1.26
+matplotlib>=3.8

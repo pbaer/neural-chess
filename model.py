@@ -1,55 +1,87 @@
 # -*- coding: utf-8 -*-
-import keras
-from keras.layers import Dense, Activation
-from keras.models import Sequential
+import torch
+import torch.nn as nn
 
-# Use this to prevent 100% GPU memory usage
-#from keras.backend.tensorflow_backend import set_session
-#import tensorflow as tf
-#config = tf.ConfigProto()
-#config.gpu_options.per_process_gpu_memory_fraction = 0.4
-#set_session(tf.Session(config=config))
+
+class ResidualBlock(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, channels, 3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(channels)
+        self.conv2 = nn.Conv2d(channels, channels, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(channels)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        residual = x
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out = self.relu(out + residual)
+        return out
+
+
+class ChessModel(nn.Module):
+    """Residual CNN for chess move prediction (AlphaZero/Leela-style).
+
+    Input:  (B, 6, 8, 8)  — 6 piece-type planes on an 8×8 board
+    Output: (B, 4096)      — raw logits over 64×64 from-to square pairs
+    """
+
+    def __init__(self, num_blocks=10, channels=128, policy_channels=32):
+        super().__init__()
+
+        # Input convolution
+        self.input_conv = nn.Conv2d(6, channels, 3, padding=1, bias=False)
+        self.input_bn = nn.BatchNorm2d(channels)
+        self.relu = nn.ReLU(inplace=True)
+
+        # Residual tower
+        self.residual_tower = nn.Sequential(
+            *[ResidualBlock(channels) for _ in range(num_blocks)]
+        )
+
+        # Policy head
+        self.policy_conv = nn.Conv2d(channels, policy_channels, 1, bias=False)
+        self.policy_bn = nn.BatchNorm2d(policy_channels)
+        self.policy_fc = nn.Linear(policy_channels * 8 * 8, 4096)
+
+    def forward(self, x):
+        # x: (B, 6, 8, 8)
+        out = self.relu(self.input_bn(self.input_conv(x)))
+        out = self.residual_tower(out)
+
+        # Policy head
+        p = self.relu(self.policy_bn(self.policy_conv(out)))
+        p = p.flatten(1)  # (B, policy_channels * 64)
+        p = self.policy_fc(p)  # (B, 4096)
+        return p
+
 
 def create_model():
-    model = Sequential([
-        Dense(3000, input_shape=(384,)),
-        Activation('relu'),
-        Dense(3000),
-        Activation('relu'),
-        Dense(3000),
-        Activation('relu'),
-        Dense(3000),
-        Activation('relu'),
-        Dense(4096),
-        Activation('softmax')])
-    compile_model(model)
+    return ChessModel()
+
+
+def load_model(filename, device=None):
+    """Load a saved .pt model file.
+
+    Args:
+        filename: path to .pt file, or a bare name resolved as model/<name>.pt
+        device: torch device (auto-detected if None)
+    """
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if not filename.endswith('.pt'):
+        filename = 'model/' + filename + '.pt'
+
+    model = ChessModel()
+    model.load_state_dict(torch.load(filename, map_location=device, weights_only=True))
+    model.to(device)
+    model.eval()
     return model
 
-def compile_model(model):
-    model.compile(optimizer='adadelta',
-                  loss='categorical_crossentropy',
-                  metrics=['accuracy'])
-
-def load_model(filename):
-    if filename.endswith('.json'):
-        json_filename = filename
-        h5_filename = filename[:-5] + '.h5'
-    else: # assume local filename root only
-        json_filename = 'model/' + filename + '.json'
-        h5_filename = 'model/' + filename + '.h5'
-    json_filename.replace('\\', '/');
-    h5_filename.replace('\\', '/');
-    with open(json_filename, 'r') as json_file:
-        model_json = json_file.read()
-        json_file.close()
-    model = keras.models.model_from_json(model_json)
-    model.load_weights(h5_filename)
-    compile_model(model)
-    return model
 
 def save_model(model, filename):
-    filename = 'model/' + filename
-    model.save_weights(filename + '.h5')
-    model_json = model.to_json()
-    with open(filename + '.json', 'w') as json_file:
-        json_file.write(model_json)
+    """Save model state dict as a .pt file into model/ directory."""
+    path = 'model/' + filename + '.pt'
+    torch.save(model.state_dict(), path)

@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
+import torch
 from model import load_model
-from stockfish import Stockfish
-from play import play_engine
-from play import print_stats
-import tensorflow as tf
+from play import create_engine, play_engine, print_stats
 
-model = load_model('modelDb_e0037')
-engine = Stockfish(depth=0, param={'Skill Level':0})
-stats = play_engine(model, engine, 10)
-print_stats(stats)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = load_model('model', device=device)
+engine = create_engine(depth=0, skill_level=0)
+
+try:
+    stats = play_engine(model, engine, 10, device=device)
+    print_stats(stats)
+finally:
+    engine.quit()

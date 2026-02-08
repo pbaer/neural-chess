@@ -2,6 +2,11 @@
 .playstats.txt
 data/
 model/
+*.pt
+*.pth
+.stop
+.stopplay
+.claude/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
