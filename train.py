@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+import glob
 import numpy as np
 import os
 import platform
+import re
 import time
 import torch
 import torch.nn as nn
@@ -58,11 +60,40 @@ class ChessDataset(Dataset):
 
 
 # ---------------------------------------------------------------------------
+# Checkpoint auto-resume
+# ---------------------------------------------------------------------------
+
+def _find_latest_checkpoint(save_name='model', model_dir='model'):
+    """Find the latest checkpoint matching {save_name}_e{epoch}.pt in model_dir.
+
+    Returns (path, epoch) or (None, 0) if no checkpoint exists.
+    """
+    pattern = os.path.join(model_dir, f'{save_name}_e*.pt')
+    matches = glob.glob(pattern)
+    if not matches:
+        return None, 0
+
+    epoch_re = re.compile(re.escape(save_name) + r'_e(\d+)\.pt$')
+    best_path, best_epoch = None, -1
+    for path in matches:
+        m = epoch_re.search(os.path.basename(path))
+        if m:
+            ep = int(m.group(1))
+            if ep > best_epoch:
+                best_epoch = ep
+                best_path = path
+
+    if best_path is None:
+        return None, 0
+    return best_path, best_epoch
+
+
+# ---------------------------------------------------------------------------
 # Training loop
 # ---------------------------------------------------------------------------
 
 def train(data_folder='data', batch_size=4096, lr=1e-3, weight_decay=1e-4,
-          save_name='model', start_epoch=0, resume_pt=None):
+          save_name='model', start_epoch=0, resume_pt=None, no_resume=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     if device.type == 'cuda':
@@ -76,9 +107,15 @@ def train(data_folder='data', batch_size=4096, lr=1e-3, weight_decay=1e-4,
     # Model
     model = ChessModel().to(device)
 
+    # Auto-resume: find latest checkpoint unless --no-resume or explicit start_epoch
+    if resume_pt is None and not no_resume and start_epoch == 0:
+        resume_pt, detected_epoch = _find_latest_checkpoint(save_name)
+        if resume_pt:
+            start_epoch = detected_epoch + 1  # continue from next epoch
+
     if resume_pt:
         model.load_state_dict(torch.load(resume_pt, map_location=device, weights_only=True))
-        print(f"Resumed from {resume_pt}")
+        print(f"Resumed from {resume_pt} (next epoch: {start_epoch})")
 
     params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {params:,}")
@@ -230,4 +267,25 @@ class TrainingSet():
 
 
 if __name__ == '__main__':
-    train()
+    import argparse
+    parser = argparse.ArgumentParser(description='Train chess model')
+    parser.add_argument('--data', default='data', help='data folder (default: data)')
+    parser.add_argument('--batch-size', type=int, default=4096)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--weight-decay', type=float, default=1e-4)
+    parser.add_argument('--save-name', default='model', help='checkpoint name prefix')
+    parser.add_argument('--start-epoch', type=int, default=0, help='override start epoch')
+    parser.add_argument('--resume', default=None, help='explicit checkpoint path to resume from')
+    parser.add_argument('--no-resume', action='store_true', help='start fresh, ignore existing checkpoints')
+    args = parser.parse_args()
+
+    train(
+        data_folder=args.data,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        save_name=args.save_name,
+        start_epoch=args.start_epoch,
+        resume_pt=args.resume,
+        no_resume=args.no_resume,
+    )

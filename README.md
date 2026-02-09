@@ -142,12 +142,32 @@ python train.py
 
 Training runs indefinitely until you create a `.stop` file in the project root. The model is checkpointed to `model/` after every epoch.
 
-To resume training from a checkpoint:
+Training **automatically resumes** from the latest checkpoint in `model/`. If `model/model_e0010.pt` is the latest file, running `python train.py` will load it and continue from epoch 11.
 
-```python
-from train import train
-train(resume_pt='model/model_e0010.pt', start_epoch=11)
+To start fresh (ignoring existing checkpoints):
+
+```bash
+python train.py --no-resume
 ```
+
+To resume from a specific checkpoint:
+
+```bash
+python train.py --resume model/model_e0005.pt --start-epoch 6
+```
+
+All training options:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--data` | `data` | Data folder containing NPZ files |
+| `--batch-size` | 4096 | Training batch size |
+| `--lr` | 0.001 | Learning rate |
+| `--weight-decay` | 0.0001 | AdamW weight decay |
+| `--save-name` | `model` | Checkpoint name prefix |
+| `--start-epoch` | 0 | Override starting epoch number |
+| `--resume` | *(auto)* | Explicit checkpoint path to resume from |
+| `--no-resume` | off | Start fresh, ignore existing checkpoints |
 
 ## Playing
 
