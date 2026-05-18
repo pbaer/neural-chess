@@ -1,69 +1,36 @@
 # -*- coding: utf-8 -*-
+"""v1 training loop. Writes checkpoints to model/v1/<save_name>_e<NNNN>.pt."""
 import glob
-import numpy as np
+import math
 import os
 import platform
 import re
+import sys
 import time
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from model import ChessModel, save_model
+
+# Allow `python src/v1/train.py` from the repo root: ensure the repo root
+# is on sys.path so `from src.v1...` imports resolve.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+import torch  # noqa: E402
+import torch.nn as nn  # noqa: E402
+from torch.utils.data import DataLoader  # noqa: E402
+
+from src.v1.dataset import ChessDataset  # noqa: E402
+from src.v1.model import ChessModel  # noqa: E402
 
 
-# ---------------------------------------------------------------------------
-# PyTorch Dataset
-# ---------------------------------------------------------------------------
-
-class ChessDataset(Dataset):
-    """Loads all NPZ files from a folder into memory.
-
-    X is stored as float32 (B, 6, 8, 8).
-    Y is stored as int64 class indices (B,) via argmax of the one-hot labels.
-    """
-
-    def __init__(self, folder='data'):
-        # Two-pass loading to avoid doubling peak RAM.
-        # Pass 1: count total rows from metadata.
-        files = []
-        total = 0
-        for filename in sorted(os.listdir(folder)):
-            if not filename.endswith('.npz'):
-                continue
-            path = folder + '/' + filename
-            meta = np.load(path, mmap_mode='r')['meta']
-            n = int(meta[0])
-            files.append((path, filename, n))
-            total += n
-            print(f"{n:>9,} rows in {filename}")
-
-        # Pass 2: pre-allocate and fill in-place (peak ≈ 32 GB).
-        self.X = np.empty((total, 6, 8, 8), dtype=np.float32)
-        self.Y = np.empty((total,), dtype=np.int64)
-        offset = 0
-        for path, filename, n in files:
-            data = np.load(path)
-            self.X[offset:offset + n] = data['X'][:n].reshape(-1, 6, 8, 8).astype(np.float32)
-            self.Y[offset:offset + n] = data['Y'][:n].argmax(axis=1)
-            offset += n
-            del data
-
-        print(f"{len(self):>9,} total samples loaded "
-              f"({self.X.nbytes / 1024**3:.2f} GB features + "
-              f"{self.Y.nbytes / 1024**3:.2f} GB labels)")
-
-    def __len__(self):
-        return len(self.Y)
-
-    def __getitem__(self, idx):
-        return torch.from_numpy(self.X[idx]), self.Y[idx]
+DEFAULT_DATA_DIR = 'data/v1'
+DEFAULT_MODEL_DIR = 'model/v1'
 
 
 # ---------------------------------------------------------------------------
 # Checkpoint auto-resume
 # ---------------------------------------------------------------------------
 
-def _find_latest_checkpoint(save_name='model', model_dir='model'):
+def _find_latest_checkpoint(save_name='model', model_dir=DEFAULT_MODEL_DIR):
     """Find the latest checkpoint matching {save_name}_e{epoch}.pt in model_dir.
 
     Returns (path, epoch) or (None, 0) if no checkpoint exists.
@@ -89,11 +56,49 @@ def _find_latest_checkpoint(save_name='model', model_dir='model'):
 
 
 # ---------------------------------------------------------------------------
+# LR schedule
+# ---------------------------------------------------------------------------
+
+def _make_cosine_scheduler(optimizer, t_max):
+    """Cosine decay over `t_max` epochs that clamps at the floor afterwards.
+
+    The built-in CosineAnnealingLR keeps evaluating cos() past T_max, so the LR
+    rebounds back toward base — surprising for indefinite training. This wraps
+    a LambdaLR around min(epoch, t_max) so the LR rests at 0 after t_max.
+    """
+    def lr_lambda(epoch):
+        e = min(epoch, t_max)
+        return 0.5 * (1.0 + math.cos(math.pi * e / t_max))
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint I/O
+# ---------------------------------------------------------------------------
+
+def _unwrap_compiled(model):
+    """torch.compile wraps the module; persist the underlying state_dict."""
+    return getattr(model, '_orig_mod', model)
+
+
+def save_checkpoint(tag, model, optimizer, scheduler, epoch, model_dir=DEFAULT_MODEL_DIR):
+    path = os.path.join(model_dir, tag + '.pt')
+    torch.save({
+        'model': _unwrap_compiled(model).state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
+        'epoch': epoch,
+    }, path)
+
+
+# ---------------------------------------------------------------------------
 # Training loop
 # ---------------------------------------------------------------------------
 
-def train(data_folder='data', batch_size=4096, lr=1e-3, weight_decay=1e-4,
-          save_name='model', start_epoch=0, resume_pt=None, no_resume=False):
+def train(data_folder=DEFAULT_DATA_DIR, model_dir=DEFAULT_MODEL_DIR,
+          batch_size=4096, lr=1e-3, weight_decay=1e-4,
+          epochs=50, save_name='model', start_epoch=0, resume_pt=None,
+          no_resume=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     if device.type == 'cuda':
@@ -109,12 +114,19 @@ def train(data_folder='data', batch_size=4096, lr=1e-3, weight_decay=1e-4,
 
     # Auto-resume: find latest checkpoint unless --no-resume or explicit start_epoch
     if resume_pt is None and not no_resume and start_epoch == 0:
-        resume_pt, detected_epoch = _find_latest_checkpoint(save_name)
+        resume_pt, detected_epoch = _find_latest_checkpoint(save_name, model_dir=model_dir)
         if resume_pt:
             start_epoch = detected_epoch + 1  # continue from next epoch
 
+    resume_data = None
     if resume_pt:
-        model.load_state_dict(torch.load(resume_pt, map_location=device, weights_only=True))
+        resume_data = torch.load(resume_pt, map_location=device, weights_only=True)
+        if isinstance(resume_data, dict) and 'model' in resume_data:
+            model.load_state_dict(resume_data['model'])
+        else:
+            # Legacy checkpoint: weights only. Optimizer/scheduler reset.
+            model.load_state_dict(resume_data)
+            resume_data = None
         print(f"Resumed from {resume_pt} (next epoch: {start_epoch})")
 
     params = sum(p.numel() for p in model.parameters())
@@ -132,17 +144,25 @@ def train(data_folder='data', batch_size=4096, lr=1e-3, weight_decay=1e-4,
 
     # Optimizer & scheduler
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
+    scheduler = _make_cosine_scheduler(optimizer, t_max=epochs)
     criterion = nn.CrossEntropyLoss()
+
+    if resume_data is not None:
+        try:
+            optimizer.load_state_dict(resume_data['optimizer'])
+            scheduler.load_state_dict(resume_data['scheduler'])
+            print("Restored optimizer + scheduler state")
+        except (KeyError, ValueError) as e:
+            print(f"Could not restore optimizer/scheduler ({e}); continuing with fresh state")
 
     # Mixed precision
     use_amp = device.type == 'cuda'
     scaler = torch.amp.GradScaler('cuda', enabled=use_amp)
 
-    os.makedirs('model', exist_ok=True)
+    os.makedirs(model_dir, exist_ok=True)
     epoch = start_epoch
 
-    print(f"\nTraining with batch_size={batch_size}, lr={lr}, AMP={use_amp}")
+    print(f"\nTraining with batch_size={batch_size}, lr={lr}, epochs={epochs}, AMP={use_amp}")
     print(f"Batches per epoch: {len(loader)}")
     print("Create a '.stop' file to stop after the current epoch.\n")
 
@@ -186,7 +206,7 @@ def train(data_folder='data', batch_size=4096, lr=1e-3, weight_decay=1e-4,
         accuracy = epoch_correct / epoch_samples
 
         tag = f"{save_name}_e{epoch:04d}"
-        save_model(model, tag)
+        save_checkpoint(tag, model, optimizer, scheduler, epoch, model_dir=model_dir)
         print(f"Epoch {epoch:4d} | loss {avg_loss:.4f} | acc {accuracy:.4f} | "
               f"{elapsed:.1f}s | lr {scheduler.get_last_lr()[0]:.2e} | saved {tag}.pt")
 
@@ -197,82 +217,18 @@ def train(data_folder='data', batch_size=4096, lr=1e-3, weight_decay=1e-4,
     print("Training stopped.")
 
 
-# ---------------------------------------------------------------------------
-# Legacy TrainingSet class — used by parse.py (pure numpy, no torch dependency)
-# ---------------------------------------------------------------------------
-
-class TrainingSet():
-    FEATURES = 6 * 8 * 8
-    OUTPUTS = 64 * 64
-
-    def __init__(self, max_rows):
-        self.X = np.zeros((max_rows, self.FEATURES), dtype='int8')
-        self.Y = np.zeros((max_rows, self.OUTPUTS), dtype='int8')
-        self.rows = 0
-        self.max_rows = max_rows
-
-    def reset(self):
-        self.rows = 0
-
-    def get(self):
-        return self.X[0:self.rows, :], self.Y[0:self.rows, :]
-
-    def is_full(self):
-        return self.rows == self.max_rows
-
-    def add_from_file(self, filename):
-        data = np.load(filename)
-        return self.add_from_data(data)
-
-    def add_from_data(self, data):
-        data_rows = data['meta'][0]
-        if (self.rows + data_rows > self.max_rows):
-            return False
-        data_X = data['X']
-        data_Y = data['Y']
-        self.X[self.rows:(self.rows + data_rows), :] = data_X[0:data_rows, :]
-        self.Y[self.rows:(self.rows + data_rows), :] = data_Y[0:data_rows, :]
-        self.rows += data_rows
-        return True
-
-    def add_from_folder(self, foldername, printonly=False):
-        total_rows = 0
-        for filename in os.listdir(foldername):
-            if not filename.endswith('.npz'):
-                continue
-            data = np.load(foldername + '/' + filename)
-            data_rows = data['meta'][0]
-            print("%d rows in %s" % (data_rows, filename))
-            total_rows += data_rows
-            if printonly:
-                continue
-            if not self.add_from_data(data):
-                total_rows -= data_rows
-                print("Training set full, not adding this file.")
-                break
-        print("%d total rows (%.2fGB expanded)" % (total_rows, (float(total_rows) * (self.FEATURES + self.OUTPUTS)) / (1024 * 1024 * 1024)))
-
-    def add_row(self, x, y):
-        if self.is_full():
-            return False
-        self.X[self.rows] = x
-        self.Y[self.rows] = y
-        self.rows += 1
-        return True
-
-    def save_to_file(self, filename):
-        meta = np.ndarray((1), dtype=int)
-        meta[0] = self.rows
-        np.savez_compressed('data/' + filename, X=self.X[0:self.rows, :], Y=self.Y[0:self.rows, :], meta=meta)
-
-
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='Train chess model')
-    parser.add_argument('--data', default='data', help='data folder (default: data)')
+    parser = argparse.ArgumentParser(description='Train v1 chess model')
+    parser.add_argument('--data', default=DEFAULT_DATA_DIR,
+                        help=f'data folder (default: {DEFAULT_DATA_DIR})')
+    parser.add_argument('--model-dir', default=DEFAULT_MODEL_DIR,
+                        help=f'checkpoint output folder (default: {DEFAULT_MODEL_DIR})')
     parser.add_argument('--batch-size', type=int, default=4096)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--weight-decay', type=float, default=1e-4)
+    parser.add_argument('--epochs', type=int, default=50,
+                        help='cosine LR schedule horizon — LR floors at 0 after this many epochs (default: 50)')
     parser.add_argument('--save-name', default='model', help='checkpoint name prefix')
     parser.add_argument('--start-epoch', type=int, default=0, help='override start epoch')
     parser.add_argument('--resume', default=None, help='explicit checkpoint path to resume from')
@@ -281,9 +237,11 @@ if __name__ == '__main__':
 
     train(
         data_folder=args.data,
+        model_dir=args.model_dir,
         batch_size=args.batch_size,
         lr=args.lr,
         weight_decay=args.weight_decay,
+        epochs=args.epochs,
         save_name=args.save_name,
         start_epoch=args.start_epoch,
         resume_pt=args.resume,

@@ -1,4 +1,6 @@
 torch>=2.2.0
 python-chess>=1.10
 numpy>=1.26
-matplotlib>=3.8
+# v2 dataset acquire/filter pipeline only:
+pyarrow>=14.0
+zstandard>=0.22

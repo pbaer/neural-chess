@@ -1,7 +1,16 @@
 .azurekey.txt
 .playstats.txt
-data/
+logs/
+tmp/
+# Eval CSVs are generated artifacts; the build log captures the meaningful results
+eval/**/*.csv
+# Trained model checkpoints + per-version training archives are large and
+# generated; the model/ tree is local-only.
 model/
+# NPZ training corpora (data/v1/*.npz, data/v2/...) and PGN/source dumps
+# in data_research/ are large and not tracked.
+data/
+data_research/
 *.pt
 *.pth
 .stop
