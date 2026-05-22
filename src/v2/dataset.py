@@ -288,16 +288,33 @@ class ChessDatasetV2(Dataset):
         self.input_planes = meta['input_planes']
         self.n_move_classes = meta['n_move_classes']
         self.shard_dir = shard_dir
+        self._open_memmaps()
 
-        self.X = np.memmap(os.path.join(shard_dir, 'X.bin'),
+    def _open_memmaps(self):
+        self.X = np.memmap(os.path.join(self.shard_dir, 'X.bin'),
                            dtype=np.int8, mode='r',
                            shape=(self.n_samples, self.input_planes, 8, 8))
-        self.YP = np.memmap(os.path.join(shard_dir, 'Y_policy.bin'),
+        self.YP = np.memmap(os.path.join(self.shard_dir, 'Y_policy.bin'),
                             dtype=np.int32, mode='r',
                             shape=(self.n_samples,))
-        self.YV = np.memmap(os.path.join(shard_dir, 'Y_value.bin'),
+        self.YV = np.memmap(os.path.join(self.shard_dir, 'Y_value.bin'),
                             dtype=np.int8, mode='r',
                             shape=(self.n_samples,))
+
+    # np.memmap can't be pickled through the Windows multiprocessing pipe
+    # (OSError 22). Strip the memmaps before pickling and re-open them in
+    # the worker after unpickling — workers each get their own file handle.
+    def __getstate__(self):
+        return {
+            'n_samples': self.n_samples,
+            'input_planes': self.input_planes,
+            'n_move_classes': self.n_move_classes,
+            'shard_dir': self.shard_dir,
+        }
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._open_memmaps()
 
     def __len__(self):
         return self.n_samples

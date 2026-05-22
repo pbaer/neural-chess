@@ -145,6 +145,46 @@ def run_h2h_eval(v2_path: str, opponent_path: str, games: int = 100, temp: float
     }
 
 
+def run_random_eval(v2_path: str, games: int = 100):
+    """v2 vs a uniform-random-move opponent. 50/50 color split.
+    The headline metrics are win% (want 100%) and avg plies/game (finishing
+    speed — lower is better). Draws here are conversion failures."""
+    import chess
+    from src.inference_api import load_policy_engine
+    from src.game_loop import play_models
+    from src.random_engine import RandomPolicyEngine
+
+    e_v2 = load_policy_engine(v2_path)
+    rnd = RandomPolicyEngine(seed=0)
+
+    half = games // 2
+    other = games - half
+
+    t0 = time.time()
+    w = play_models(e_v2, rnd, limit=half, a_color=chess.WHITE,
+                    temperature=0.0, temp_decay=0.0, max_plies=400)
+    b = play_models(e_v2, rnd, limit=other, a_color=chess.BLACK,
+                    temperature=0.0, temp_decay=0.0, max_plies=400)
+    elapsed = time.time() - t0
+
+    v2_wins = w['results']['1-0'] + b['results']['0-1']
+    v2_draws = w['results']['1/2-1/2'] + b['results']['1/2-1/2']
+    v2_losses = w['results']['0-1'] + b['results']['1-0']
+    total = v2_wins + v2_draws + v2_losses
+    total_plies = w['turns'] + b['turns']
+
+    return {
+        'moves': total_plies,   # total plies; avg plies/game = moves / games
+        'illegal_pct': 0.0,
+        'won': 100 * v2_wins / max(total, 1),
+        'draw': 100 * v2_draws / max(total, 1),
+        'lost': 100 * v2_losses / max(total, 1),
+        'white_won': 100 * w['results']['1-0'] / max(half, 1),
+        'black_won': 100 * b['results']['0-1'] / max(other, 1),
+        'elapsed_s': elapsed,
+    }
+
+
 def _most_recent_lost(csv_path: str, opponent: str):
     """Most recent lost_pct for the given opponent label, or None."""
     if not os.path.exists(csv_path):
@@ -186,6 +226,10 @@ def main():
                         help='games for v1 head-to-head')
     parser.add_argument('--skip-h2h', action='store_true')
     parser.add_argument('--skip-sf', action='store_true')
+    parser.add_argument('--skip-random', action='store_true',
+                        help='Skip the uniform-random-mover baseline')
+    parser.add_argument('--random-games', type=int, default=100,
+                        help='games for the random-mover baseline')
     parser.add_argument('--no-gate', action='store_true',
                         help='Run all SF tiers regardless of prior loss-rate gating')
     args = parser.parse_args()
@@ -234,6 +278,28 @@ def main():
                                 r['illegal_pct'], r['moves'],
                                 f'{r["elapsed_s"]:.1f}'])
                 f.flush()
+
+        # Random-mover baseline (want 100% wins + low avg plies/game)
+        if not args.skip_random:
+            ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            print(f'EVAL {ts} epoch={args.epoch} opp=random '
+                  f'(uniform random, {args.random_games} games)', flush=True)
+            r = run_random_eval(v2_path, args.random_games)
+            if 'error' in r:
+                print(f'  ERROR: {r["error"][:200]}', flush=True)
+                w.writerow([args.epoch, ts, 'random', args.random_games,
+                            '', '', '', '', '', '', '', f'{r["elapsed_s"]:.1f}'])
+            else:
+                avg_plies = r['moves'] / max(args.random_games, 1)
+                print(f'  W:{r["won"]:.0f}% D:{r["draw"]:.0f}% L:{r["lost"]:.0f}% '
+                      f'avg {avg_plies:.1f} plies/game '
+                      f'({r["elapsed_s"]:.1f}s)', flush=True)
+                w.writerow([args.epoch, ts, 'random', args.random_games,
+                            r['won'], r['draw'], r['lost'],
+                            r['white_won'], r['black_won'],
+                            r['illegal_pct'], r['moves'],
+                            f'{r["elapsed_s"]:.1f}'])
+            f.flush()
 
         # v1 head-to-head
         if not args.skip_h2h and os.path.exists(args.v1_best):

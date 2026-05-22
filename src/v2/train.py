@@ -82,6 +82,7 @@ def train(
     stop_file: str = '.stop',
     log_every: int = 100,
     keep_last_n: int = 0,
+    num_workers: int = 0,
 ):
     """`epochs` is the cosine LR-schedule horizon. `max_epochs` is the
     actual stopping condition (default: same as epochs). Training also exits
@@ -114,9 +115,16 @@ def train(
     dataset = ChessDatasetV2(shard_dir)
     print(f"Dataset: {len(dataset):,} samples from {shard_dir}")
 
+    # num_workers > 0 is now safe (and ~7x faster on the 100M shard) thanks to
+    # ChessDatasetV2's __getstate__/__setstate__ pickle fix — see
+    # memory/windows-quirks.md for the prior constraint and why it no longer
+    # applies for the file-backed memmap dataset.
     loader = DataLoader(
         dataset, batch_size=batch_size, shuffle=True,
-        pin_memory=(device.type == 'cuda'), num_workers=0,
+        pin_memory=(device.type == 'cuda'),
+        num_workers=num_workers,
+        prefetch_factor=4 if num_workers > 0 else None,
+        persistent_workers=num_workers > 0,
     )
 
     # Model
@@ -165,13 +173,20 @@ def train(
             print(f"Could not restore optim/sched ({e}); fresh state")
 
     use_amp = device.type == 'cuda'
-    scaler = torch.amp.GradScaler('cuda', enabled=use_amp)
+    # BF16 has FP32's 8-bit exponent range, so activations in the deep residual
+    # tower can't overflow to inf/NaN the way they do under FP16 (max ~65504) —
+    # FP16 overflow poisoned BN running-stat buffers and NaN'd the v2-37M e3
+    # checkpoint. BF16 also needs no gradient loss-scaling, so the scaler is
+    # only enabled for the FP16 fallback path.
+    amp_dtype = torch.bfloat16 if (use_amp and torch.cuda.is_bf16_supported()) else torch.float16
+    scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and amp_dtype == torch.float16))
 
     os.makedirs(save_dir, exist_ok=True)
     epoch = start_epoch
 
     print(f"\nTraining: batch={batch_size}, lr={lr}, epochs={epochs} (LR), "
-          f"max_epochs={max_epochs}, value_w={value_loss_weight}, AMP={use_amp}")
+          f"max_epochs={max_epochs}, value_w={value_loss_weight}, "
+          f"AMP={use_amp} dtype={amp_dtype if use_amp else 'fp32'} grad_clip=1.0")
     print(f"Batches per epoch: {len(loader)}")
     print(f"Create '{stop_file}' to stop after the current epoch (or hit max_epochs).\n")
 
@@ -191,7 +206,7 @@ def train(
             batch_yv = batch_yv.to(device, non_blocking=True).float()
             bs = batch_x.size(0)
 
-            with torch.amp.autocast('cuda', enabled=use_amp):
+            with torch.amp.autocast('cuda', enabled=use_amp, dtype=amp_dtype):
                 policy_logits, value_pred = model(batch_x)
                 value_pred = value_pred.squeeze(-1)
                 policy_loss = policy_loss_fn(policy_logits, batch_yp)
@@ -200,6 +215,10 @@ def train(
 
             optimizer.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
+            # Clip on unscaled grads (unscale_ is a no-op when the scaler is
+            # disabled, i.e. the BF16 path). Belt-and-suspenders against spikes.
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
 
@@ -263,6 +282,9 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=15, help='cosine LR horizon')
     parser.add_argument('--max-epochs', type=int, default=None,
                         help='actually stop after this many epochs (default: same as --epochs)')
+    parser.add_argument('--num-workers', type=int, default=0,
+                        help='DataLoader worker processes (0 = main thread). '
+                             '8 recommended for large memmap shards.')
     parser.add_argument('--keep-last-n', type=int, default=0,
                         help='rolling-checkpoint: keep only the N most recent .pt files (0 = keep all)')
     parser.add_argument('--value-loss-weight', type=float, default=1.0)
@@ -309,6 +331,7 @@ if __name__ == '__main__':
         epochs=args.epochs,
         max_epochs=args.max_epochs,
         keep_last_n=args.keep_last_n,
+        num_workers=args.num_workers,
         save_name=args.save_name,
         start_epoch=args.start_epoch,
         resume_pt=args.resume,

@@ -41,11 +41,28 @@ def main():
     inter.add_argument('--temp-decay', type=float, default=0.05,
                        help='Exponential decay rate per ply (default: 0.05)')
 
+    # MCTS options (apply to both subcommands). When --mcts is set, the loaded
+    # PolicyEngine is wrapped in an MCTSEngine (AlphaZero-style PUCT). Only
+    # works for v2 checkpoints (need a value head).
+    for sub_p in (eng, inter):
+        sub_p.add_argument('--mcts', action='store_true',
+                           help='Use PUCT MCTS instead of raw single-shot policy')
+        sub_p.add_argument('--mcts-sims', type=int, default=70,
+                           help='MCTS simulations per move (default 70 ~= SF-ultra latency)')
+        sub_p.add_argument('--mcts-cpuct', type=float, default=1.5,
+                           help='PUCT exploration constant')
+
     args = parser.parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     policy_engine = load_policy_engine(args.model, device=device)
     print(f"Loaded {args.model}")
+
+    if getattr(args, 'mcts', False):
+        from src.mcts import MCTSEngine
+        policy_engine = MCTSEngine(policy_engine, c_puct=args.mcts_cpuct,
+                                   n_simulations=args.mcts_sims)
+        print(f"MCTS enabled: {args.mcts_sims} sims/move, c_puct={args.mcts_cpuct}")
 
     if args.mode == 'engine':
         model_color = chess.WHITE if args.color == 'white' else chess.BLACK

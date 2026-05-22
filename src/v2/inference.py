@@ -83,6 +83,52 @@ class V2PolicyEngine(PolicyEngine):
         return cls(model, device)
 
     @torch.no_grad()
+    def evaluate(self, board: chess.Board):
+        """One forward pass → (priors, value) for MCTS.
+
+        Returns:
+            priors: dict {chess.Move (actual board coords) -> prior prob},
+                    softmax over the policy head restricted to legal moves
+                    and renormalized.
+            value:  float in [-1, +1], the model's value estimate from the
+                    side-to-move's perspective.
+        """
+        is_white = board.turn
+        x = featurize(board)
+        rotated_board = board if is_white else board.mirror()
+        x = torch.from_numpy(x).unsqueeze(0).to(self.device)
+
+        logits, value = self.model(x)
+        probs = torch.softmax(logits, dim=1).cpu().numpy().astype(np.float64).reshape(NUM_MOVES)
+        v = float(value.squeeze().item())
+
+        mask = legal_mask(rotated_board)
+        probs = np.where(mask, probs, 0.0)
+        total = probs.sum()
+
+        priors = {}
+        legal_idx = np.flatnonzero(mask)
+        for idx in legal_idx:
+            rotated_move = decode_move(int(idx), rotated_board)
+            if is_white:
+                move = rotated_move
+            else:
+                move = chess.Move(
+                    rotate_square(rotated_move.from_square),
+                    rotate_square(rotated_move.to_square),
+                    promotion=rotated_move.promotion,
+                )
+            if move in board.legal_moves:
+                priors[move] = probs[idx] / total if total > 0 else 1.0 / len(legal_idx)
+
+        # Fallback: if decode produced nothing legal, use uniform over legal moves
+        if not priors:
+            legal = list(board.legal_moves)
+            priors = {m: 1.0 / len(legal) for m in legal}
+
+        return priors, v
+
+    @torch.no_grad()
     def generate_move(self, board: chess.Board, stats, temperature: float = 0.0) -> chess.Move:
         """Generate a legal move using the v2 model.
 
