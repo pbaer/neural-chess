@@ -55,6 +55,10 @@ class ShardSpec:
     tier_mix_requested: dict = None
     sources: dict = None
     skip_first_plies: int = 2
+    # Future-move self-supervision targets (Principle-2-clean: the moves
+    # actually played at the next N plies of the same game). 0 = none.
+    n_future_moves: int = 0
+    y_future_dtype: str = 'int32'
     # Provenance
     generated_at: str = ''
 
@@ -126,6 +130,7 @@ def generate_shards(
     skip_first_plies: int = 2,
     seed: int = 0,
     progress_every: int = 10000,
+    n_future_moves: int = 0,
 ):
     """Build (X.bin, Y_policy.bin, Y_value.bin, meta.json) from filtered PGNs.
 
@@ -170,13 +175,22 @@ def generate_shards(
     x_path = os.path.join(tmp_dir, 'X.bin')
     yp_path = os.path.join(tmp_dir, 'Y_policy.bin')
     yv_path = os.path.join(tmp_dir, 'Y_value.bin')
+    yf_path = os.path.join(tmp_dir, 'Y_future.bin')
 
     X = np.memmap(x_path, dtype=np.int8, mode='w+',
                   shape=(cap, NUM_PLANES, 8, 8))
     YP = np.memmap(yp_path, dtype=np.int32, mode='w+', shape=(cap,))
     YV = np.memmap(yv_path, dtype=np.int8, mode='w+', shape=(cap,))
+    # Future-move targets (cap, n_future_moves) int32; -1 = no such future ply
+    # (game ended) -> masked at train time via cross-entropy ignore_index=-1.
+    YF = None
+    if n_future_moves > 0:
+        YF = np.memmap(yf_path, dtype=np.int32, mode='w+',
+                       shape=(cap, n_future_moves))
     # First flush so the OS knows the full file size up front.
     X.flush(); YP.flush(); YV.flush()
+    if YF is not None:
+        YF.flush()
 
     rng = random.Random(seed)
 
@@ -206,15 +220,29 @@ def generate_shards(
             samples = list(_process_game(game, skip_first_plies))
             if not samples:
                 continue
+            # Future-move targets: for sample j, the policy labels of samples
+            # j+1..j+n_future_moves WITHIN THE SAME GAME (-1 past game end).
+            # Computed from the full game so truncating the write below is safe.
+            futures = None
+            if n_future_moves > 0:
+                pol = [s[1] for s in samples]
+                m = len(samples)
+                futures = [[pol[j + k] if j + k < m else -1
+                            for k in range(1, n_future_moves + 1)]
+                           for j in range(m)]
             n = len(samples)
             # Bounds check vs memmap cap
             if write_idx + n > cap:
                 n = cap - write_idx
                 samples = samples[:n]
-            for x, y_pol, y_val in samples:
+                if futures is not None:
+                    futures = futures[:n]
+            for i, (x, y_pol, y_val) in enumerate(samples):
                 X[write_idx] = x.astype(np.int8)
                 YP[write_idx] = y_pol
                 YV[write_idx] = y_val
+                if YF is not None:
+                    YF[write_idx] = futures[i]
                 write_idx += 1
                 positions_in_tier += 1
                 if positions_in_tier >= tier_target:
@@ -229,16 +257,22 @@ def generate_shards(
                 X.flush()
                 YP.flush()
                 YV.flush()
+                if YF is not None:
+                    YF.flush()
 
         tier_counts[tier] = write_idx - tier_start_write
         print(f"  {tier} DONE: {tier_counts[tier]:,} positions from "
               f"{game_count:,} games", flush=True)
 
     X.flush(); YP.flush(); YV.flush()
+    if YF is not None:
+        YF.flush()
     # Explicit cleanup: numpy memmap objects hold OS-level file handles that
     # don't always release in time for the subsequent truncate() on Windows.
     # del + gc.collect makes the release synchronous.
     del X, YP, YV
+    if YF is not None:
+        del YF
     gc.collect()
 
     # Truncate to actual size
@@ -251,6 +285,9 @@ def generate_shards(
         f.truncate(actual * 4)
     with open(yv_path, 'r+b') as f:
         f.truncate(actual * 1)
+    if n_future_moves > 0:
+        with open(yf_path, 'r+b') as f:
+            f.truncate(actual * n_future_moves * 4)
 
     # Write meta — to tmp dir, NOT final dir yet
     import datetime
@@ -260,6 +297,7 @@ def generate_shards(
         tier_mix_requested=tier_mix,
         sources=sources,
         skip_first_plies=skip_first_plies,
+        n_future_moves=n_future_moves,
         generated_at=datetime.datetime.now().isoformat(timespec='seconds'),
     )
     with open(os.path.join(tmp_dir, 'meta.json'), 'w') as f:
@@ -281,13 +319,20 @@ class ChessDatasetV2(Dataset):
     total dataset size — supports arbitrarily large training shards.
     """
 
-    def __init__(self, shard_dir: str):
+    def __init__(self, shard_dir: str, with_future: bool = False):
         with open(os.path.join(shard_dir, 'meta.json')) as f:
             meta = json.load(f)
         self.n_samples = meta['n_samples']
         self.input_planes = meta['input_planes']
         self.n_move_classes = meta['n_move_classes']
         self.shard_dir = shard_dir
+        # Future-move targets: opt-in (with_future) AND present in the shard.
+        # Default off keeps the 3-tuple interface for existing callers.
+        self.n_future_moves = meta.get('n_future_moves', 0) if with_future else 0
+        if with_future and self.n_future_moves == 0:
+            raise ValueError(
+                f"with_future=True but shard {shard_dir!r} has no future-move "
+                f"targets (meta n_future_moves=0). Regenerate with --future-moves.")
         self._open_memmaps()
 
     def _open_memmaps(self):
@@ -300,6 +345,11 @@ class ChessDatasetV2(Dataset):
         self.YV = np.memmap(os.path.join(self.shard_dir, 'Y_value.bin'),
                             dtype=np.int8, mode='r',
                             shape=(self.n_samples,))
+        self.YF = None
+        if self.n_future_moves > 0:
+            self.YF = np.memmap(os.path.join(self.shard_dir, 'Y_future.bin'),
+                                dtype=np.int32, mode='r',
+                                shape=(self.n_samples, self.n_future_moves))
 
     # np.memmap can't be pickled through the Windows multiprocessing pipe
     # (OSError 22). Strip the memmaps before pickling and re-open them in
@@ -310,6 +360,7 @@ class ChessDatasetV2(Dataset):
             'input_planes': self.input_planes,
             'n_move_classes': self.n_move_classes,
             'shard_dir': self.shard_dir,
+            'n_future_moves': self.n_future_moves,
         }
 
     def __setstate__(self, state):
@@ -321,6 +372,13 @@ class ChessDatasetV2(Dataset):
 
     def __getitem__(self, idx):
         x = self.X[idx].astype(np.float32)
+        if self.YF is not None:
+            return (
+                torch.from_numpy(x),
+                int(self.YP[idx]),
+                float(self.YV[idx]),
+                torch.from_numpy(self.YF[idx].astype(np.int64)),
+            )
         return (
             torch.from_numpy(x),
             int(self.YP[idx]),
@@ -343,9 +401,12 @@ if __name__ == '__main__':
     parser.add_argument('--low-pct', type=float, default=0.10)
     parser.add_argument('--skip-plies', type=int, default=2)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--future-moves', type=int, default=0,
+                        help='emit Y_future.bin with the next N moves played '
+                             '(self-supervision targets); 0 = none')
     args = parser.parse_args()
 
     tier_mix = {'top': args.top_pct, 'mid': args.mid_pct, 'low': args.low_pct}
     generate_shards(args.filtered_dir, args.out_dir, args.positions,
                     tier_mix=tier_mix, skip_first_plies=args.skip_plies,
-                    seed=args.seed)
+                    seed=args.seed, n_future_moves=args.future_moves)

@@ -94,4 +94,7 @@ def load_policy_engine(path: str, device: Optional[torch.device] = None) -> Poli
     if version == 'v2':
         from src.v2.inference import V2PolicyEngine
         return V2PolicyEngine.from_checkpoint(resolved, device=device)
+    if version == 'v3':
+        from src.v3.inference import V3PolicyEngine
+        return V3PolicyEngine.from_checkpoint(resolved, device=device)
     raise ValueError(f"Unknown model version: {version!r}")

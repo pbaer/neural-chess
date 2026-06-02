@@ -34,6 +34,12 @@ class ChessConfigV2:
     value_channels: int = 1       # 1x1 conv compresses to this many planes
     value_hidden: int = 64        # MLP hidden width
 
+    # Future-move auxiliary heads (v3 POC-1): N training-only policy heads that
+    # predict the moves actually played at the next N plies of the same game.
+    # 0 = none (inference-time models). Principle-2-clean: targets are observed
+    # future moves, not computed features. Discarded at inference.
+    future_move_heads: int = 0
+
     # Lookahead block (not used in T0a; placeholder for T0b+)
     # K=0 means "no lookahead" — pure encoder->heads
     lookahead_K: int = 0
@@ -69,6 +75,25 @@ class ResidualBlock(nn.Module):
         out = self.relu(self.bn1(self.conv1(x)))
         out = self.bn2(self.conv2(out))
         return self.relu(out + residual)
+
+
+class _MoveHead(nn.Module):
+    """A policy-shaped head: 1x1 conv compression -> BN -> ReLU -> 1x1 conv to
+    73 move-types -> reshape to flat (B, 4672). Used for the future-move
+    auxiliary heads (the MAIN policy head stays inline in ChessModelV2 to
+    preserve its state_dict key names for warm-start loading)."""
+
+    def __init__(self, channels: int, mid: int):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, mid, 1, bias=False)
+        self.bn = nn.BatchNorm2d(mid)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(mid, NUM_MOVE_TYPES, 1)
+
+    def forward(self, out):
+        p = self.relu(self.bn(self.conv1(out)))
+        p = self.conv2(p)  # (B, 73, 8, 8)
+        return p.permute(0, 2, 3, 1).reshape(p.size(0), NUM_MOVES)
 
 
 class ChessModelV2(nn.Module):
@@ -124,7 +149,15 @@ class ChessModelV2(nn.Module):
         self.value_fc1 = nn.Linear(config.value_channels * 64, config.value_hidden)
         self.value_fc2 = nn.Linear(config.value_hidden, 1)
 
-    def forward(self, x):
+        # Future-move auxiliary heads (training-only; unused at inference).
+        # New module names => not present in older checkpoints => init fresh
+        # on warm-start (strict=False) without disturbing the main heads.
+        self.future_heads = nn.ModuleList(
+            [_MoveHead(C, config.policy_channels)
+             for _ in range(config.future_move_heads)]
+        )
+
+    def forward(self, x, return_future: bool = False):
         # x: (B, 21, 8, 8)
         out = self.relu(self.input_bn(self.input_conv(x)))
         out = self.tower(out)  # (B, C, 8, 8)
@@ -146,6 +179,11 @@ class ChessModelV2(nn.Module):
         v = self.relu(self.value_fc1(v))
         v = torch.tanh(self.value_fc2(v))  # (B, 1)
 
+        # Inference path is unchanged: returns (policy, value). Aux heads only
+        # computed when explicitly requested (training) and present.
+        if return_future and len(self.future_heads) > 0:
+            future = [head(out) for head in self.future_heads]
+            return p, v, future
         return p, v
 
 

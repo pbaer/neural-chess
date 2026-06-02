@@ -33,6 +33,8 @@ if _REPO_ROOT not in sys.path:
 from src.v2.dataset import ChessDatasetV2
 from src.v2.inference import save_v2_checkpoint
 from src.v2.model import ChessConfigV2, ChessModelV2, count_params
+from src.v3.model import ChessConfigV3, ChessModelV3
+from src.v3.inference import save_v3_checkpoint
 
 
 # ---- LR schedule (same clamped-cosine as v1) ----
@@ -82,7 +84,10 @@ def train(
     stop_file: str = '.stop',
     log_every: int = 100,
     keep_last_n: int = 0,
+    save_every_steps: int = 0,
     num_workers: int = 0,
+    warm_start_pt: str = None,
+    future_move_weight: float = 0.5,
 ):
     """`epochs` is the cosine LR-schedule horizon. `max_epochs` is the
     actual stopping condition (default: same as epochs). Training also exits
@@ -107,13 +112,20 @@ def train(
     print(f"Device: {device}")
     if device.type == 'cuda':
         print(f"GPU: {torch.cuda.get_device_name()}")
+        # Throughput flags (negligible numerical impact under BF16 autocast):
+        # TF32 for any fp32 matmuls; cudnn autotune for the fixed-size conv stem.
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
 
     if config is None:
         config = ChessConfigV2()
 
     # Dataset
-    dataset = ChessDatasetV2(shard_dir)
-    print(f"Dataset: {len(dataset):,} samples from {shard_dir}")
+    use_future = getattr(config, 'future_move_heads', 0) > 0
+    dataset = ChessDatasetV2(shard_dir, with_future=use_future)
+    print(f"Dataset: {len(dataset):,} samples from {shard_dir}"
+          + (f" (+{dataset.n_future_moves} future-move targets)" if use_future else ""))
 
     # num_workers > 0 is now safe (and ~7x faster on the 100M shard) thanks to
     # ChessDatasetV2's __getstate__/__setstate__ pickle fix — see
@@ -128,25 +140,60 @@ def train(
     )
 
     # Model
-    model = ChessModelV2(config).to(device)
-    print(f"Model params: {count_params(model):,} (config: blocks={config.encoder_blocks}, "
-          f"channels={config.encoder_channels}, lookahead_K={config.lookahead_K})")
-
-    # Auto-resume
-    if resume_pt is None and not no_resume and start_epoch == 0:
-        resume_pt, detected_epoch = _find_latest_checkpoint(save_dir, save_name)
-        if resume_pt:
-            start_epoch = detected_epoch + 1
+    is_v3 = isinstance(config, ChessConfigV3)
+    if is_v3:
+        model = ChessModelV3(config).to(device)
+        print(f"Model params: {count_params(model):,} (v3 attention: d_model={config.d_model}, "
+              f"heads={config.n_heads}, blocks={config.n_blocks}, geometry_bias={config.geometry_bias})")
+    else:
+        model = ChessModelV2(config).to(device)
+        print(f"Model params: {count_params(model):,} (v2 CNN: blocks={config.encoder_blocks}, "
+              f"channels={config.encoder_channels}, lookahead_K={config.lookahead_K})")
 
     resume_data = None
-    if resume_pt:
-        resume_data = torch.load(resume_pt, map_location=device, weights_only=False)
-        if isinstance(resume_data, dict) and 'model' in resume_data:
-            model.load_state_dict(resume_data['model'])
-        else:
-            model.load_state_dict(resume_data)
-            resume_data = None
-        print(f"Resumed from {resume_pt} (next epoch: {start_epoch})")
+    if warm_start_pt:
+        # Warm-start: load ONLY model weights (strict=False so new aux heads
+        # init fresh), fresh optimizer/scheduler, training restarts at epoch 0.
+        # Distinct from --resume, which continues a run's full state.
+        ws = torch.load(warm_start_pt, map_location=device, weights_only=False)
+        ws_state = ws['model'] if isinstance(ws, dict) and 'model' in ws else ws
+        result = model.load_state_dict(ws_state, strict=False)
+        missing = list(result.missing_keys)
+        unexpected = list(result.unexpected_keys)
+        print(f"Warm-started from {warm_start_pt} (strict=False): "
+              f"{len(missing)} params init fresh"
+              + (f" e.g. {missing[:3]}" if missing else "")
+              + f", {len(unexpected)} unexpected skipped")
+    else:
+        # Auto-resume
+        if resume_pt is None and not no_resume and start_epoch == 0:
+            resume_pt, detected_epoch = _find_latest_checkpoint(save_dir, save_name)
+            start_epoch = (detected_epoch + 1) if resume_pt else 0
+            # Mid-epoch rolling checkpoint (model_latest.pt) is written DURING an
+            # in-progress epoch. Prefer it when it's at least as far along as the
+            # last completed-epoch checkpoint — i.e. the crash hit mid-epoch.
+            latest_path = os.path.join(save_dir, f'{save_name}_latest.pt')
+            if os.path.isfile(latest_path):
+                try:
+                    _m = torch.load(latest_path, map_location='cpu', weights_only=False)
+                    _le = _m.get('epoch', -1) if isinstance(_m, dict) else -1
+                    if _le >= start_epoch:
+                        resume_pt = latest_path
+                        start_epoch = _le
+                        print(f"Found mid-epoch checkpoint {latest_path} "
+                              f"(epoch {_le}); resuming there (restarts the epoch "
+                              f"from its first batch with these weights)")
+                except Exception as _e:
+                    print(f"Could not read {latest_path} ({_e}); ignoring it")
+
+        if resume_pt:
+            resume_data = torch.load(resume_pt, map_location=device, weights_only=False)
+            if isinstance(resume_data, dict) and 'model' in resume_data:
+                model.load_state_dict(resume_data['model'])
+            else:
+                model.load_state_dict(resume_data)
+                resume_data = None
+            print(f"Resumed from {resume_pt} (next epoch: {start_epoch})")
 
     # torch.compile not available on Windows
     if platform.system() != 'Windows':
@@ -159,10 +206,13 @@ def train(
         print("Skipping torch.compile (not supported on Windows)")
 
     # Optimizer + scheduler
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay,
+                                  fused=(device.type == 'cuda'))
     scheduler = _make_cosine_scheduler(optimizer, t_max=epochs)
     policy_loss_fn = nn.CrossEntropyLoss()
     value_loss_fn = nn.MSELoss()
+    # Future-move aux loss: ignore_index=-1 masks game-end padding.
+    future_loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
 
     if resume_data is not None:
         try:
@@ -183,6 +233,7 @@ def train(
 
     os.makedirs(save_dir, exist_ok=True)
     epoch = start_epoch
+    save_fn = save_v3_checkpoint if is_v3 else save_v2_checkpoint
 
     print(f"\nTraining: batch={batch_size}, lr={lr}, epochs={epochs} (LR), "
           f"max_epochs={max_epochs}, value_w={value_loss_weight}, "
@@ -194,24 +245,35 @@ def train(
         model.train()
         epoch_policy_loss = 0.0
         epoch_value_loss = 0.0
+        epoch_fm_loss = 0.0
         epoch_policy_correct = 0
         epoch_value_se = 0.0
         epoch_samples = 0
         t0 = time.time()
         num_batches = len(loader)
 
-        for batch_idx, (batch_x, batch_yp, batch_yv) in enumerate(loader):
-            batch_x = batch_x.to(device, non_blocking=True)
-            batch_yp = batch_yp.to(device, non_blocking=True)
-            batch_yv = batch_yv.to(device, non_blocking=True).float()
+        for batch_idx, batch in enumerate(loader):
+            batch_x = batch[0].to(device, non_blocking=True)
+            batch_yp = batch[1].to(device, non_blocking=True)
+            batch_yv = batch[2].to(device, non_blocking=True).float()
+            batch_yf = (batch[3].to(device, non_blocking=True)
+                        if use_future else None)
             bs = batch_x.size(0)
 
             with torch.amp.autocast('cuda', enabled=use_amp, dtype=amp_dtype):
-                policy_logits, value_pred = model(batch_x)
+                if use_future:
+                    policy_logits, value_pred, future_logits = model(batch_x, return_future=True)
+                else:
+                    policy_logits, value_pred = model(batch_x)
                 value_pred = value_pred.squeeze(-1)
                 policy_loss = policy_loss_fn(policy_logits, batch_yp)
                 value_loss = value_loss_fn(value_pred, batch_yv)
                 loss = policy_loss + value_loss_weight * value_loss
+                fm_loss = None
+                if use_future:
+                    fm_loss = sum(future_loss_fn(fl, batch_yf[:, k])
+                                  for k, fl in enumerate(future_logits)) / len(future_logits)
+                    loss = loss + future_move_weight * fm_loss
 
             optimizer.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
@@ -222,8 +284,22 @@ def train(
             scaler.step(optimizer)
             scaler.update()
 
+            # Mid-epoch rolling checkpoint (crash insurance — see CrashAnalysis.md).
+            # Atomic: write to .tmp then os.replace, so a crash mid-write cannot
+            # corrupt the existing model_latest.pt.
+            if save_every_steps > 0 and (batch_idx + 1) % save_every_steps == 0:
+                _latest = os.path.join(save_dir, f'{save_name}_latest.pt')
+                _tmp = _latest + '.tmp'
+                save_fn(_tmp, model, optimizer=optimizer, scheduler=scheduler,
+                        epoch=epoch, config=config)
+                os.replace(_tmp, _latest)
+                print(f"\n  [step-ckpt] {save_name}_latest.pt @ epoch {epoch} "
+                      f"batch {batch_idx+1}", flush=True)
+
             epoch_policy_loss += policy_loss.item() * bs
             epoch_value_loss += value_loss.item() * bs
+            if fm_loss is not None:
+                epoch_fm_loss += fm_loss.item() * bs
             epoch_policy_correct += (policy_logits.argmax(1) == batch_yp).sum().item()
             epoch_value_se += ((value_pred - batch_yv) ** 2).sum().item()
             epoch_samples += bs
@@ -233,8 +309,9 @@ def train(
                 avg_p = epoch_policy_loss / epoch_samples
                 avg_v = epoch_value_loss / epoch_samples
                 acc = epoch_policy_correct / epoch_samples
+                fm_str = (f" fm {epoch_fm_loss/epoch_samples:.4f}" if use_future else "")
                 print(f"\r  Epoch {epoch} [{batch_idx+1}/{num_batches}] "
-                      f"{pct:5.1f}% | pol {avg_p:.4f} val {avg_v:.4f} | "
+                      f"{pct:5.1f}% | pol {avg_p:.4f} val {avg_v:.4f}{fm_str} | "
                       f"acc {acc:.4f}", end='', flush=True)
         print()  # newline after progress
 
@@ -248,8 +325,8 @@ def train(
 
         tag = f"{save_name}_e{epoch:04d}"
         ckpt_path = os.path.join(save_dir, tag + '.pt')
-        save_v2_checkpoint(ckpt_path, model, optimizer=optimizer,
-                           scheduler=scheduler, epoch=epoch, config=config)
+        save_fn(ckpt_path, model, optimizer=optimizer,
+                scheduler=scheduler, epoch=epoch, config=config)
         print(f"Epoch {epoch:4d} | pol {avg_policy:.4f} val {avg_value:.4f} | "
               f"acc {accuracy:.4f} val_rmse {value_rmse:.3f} | "
               f"{elapsed:.1f}s | lr {scheduler.get_last_lr()[0]:.2e} | saved {tag}.pt")
@@ -287,12 +364,24 @@ if __name__ == '__main__':
                              '8 recommended for large memmap shards.')
     parser.add_argument('--keep-last-n', type=int, default=0,
                         help='rolling-checkpoint: keep only the N most recent .pt files (0 = keep all)')
+    parser.add_argument('--save-every-steps', type=int, default=0,
+                        help='also write a rolling model_latest.pt every N steps for '
+                             'mid-epoch crash recovery (0 = off; ~3500 is roughly 15 min)')
     parser.add_argument('--value-loss-weight', type=float, default=1.0)
     parser.add_argument('--save-name', default='model')
     parser.add_argument('--start-epoch', type=int, default=0)
     parser.add_argument('--resume', default=None)
     parser.add_argument('--no-resume', action='store_true')
+    parser.add_argument('--warm-start', default=None,
+                        help='load ONLY model weights (strict=False) from this '
+                             'checkpoint, fresh optimizer/scheduler, restart at '
+                             'epoch 0. For fine-tuning v2 weights with new aux heads.')
     parser.add_argument('--stop-file', default='.stop')
+    parser.add_argument('--future-move-heads', type=int, default=0,
+                        help='N future-move aux heads (predict moves at t+1..t+N). '
+                             'Requires a shard generated with --future-moves >= N.')
+    parser.add_argument('--future-move-weight', type=float, default=0.5,
+                        help='weight on the averaged future-move aux loss')
     # Config knobs
     parser.add_argument('--blocks', type=int, default=6, help='encoder ResNet blocks')
     parser.add_argument('--channels', type=int, default=128, help='encoder channel count')
@@ -307,19 +396,45 @@ if __name__ == '__main__':
                         help='lookahead rollout depth (0 = no lookahead)')
     parser.add_argument('--aggregator-heads', type=int, default=4)
     parser.add_argument('--aggregator-layers', type=int, default=2)
+    # Architecture selection + v3 (attention tower) knobs
+    parser.add_argument('--arch', choices=['v2', 'v3'], default='v2',
+                        help='v2 = CNN ResNet tower; v3 = attention tower')
+    parser.add_argument('--d-model', type=int, default=256, help='[v3] token dim / stem width')
+    parser.add_argument('--n-heads', type=int, default=8, help='[v3] attention heads')
+    parser.add_argument('--n-blocks', type=int, default=20, help='[v3] transformer blocks')
+    parser.add_argument('--ffn-mult', type=int, default=4, help='[v3] FFN hidden multiplier')
+    parser.add_argument('--stem-blocks', type=int, default=2, help='[v3] conv-stem residual blocks')
+    parser.add_argument('--no-geometry-bias', action='store_true',
+                        help='[v3] disable the 2D relative-position (geometry) bias')
+    parser.add_argument('--checkpoint-every', type=int, default=0,
+                        help='[v3] gradient-checkpoint every Nth block (0=none, fastest; '
+                             '1=all, lowest VRAM). 0 fits batch 1024 in ~12GB and is fastest.')
     args = parser.parse_args()
 
-    config = ChessConfigV2(
-        encoder_blocks=args.blocks,
-        encoder_channels=args.channels,
-        policy_channels=args.policy_channels,
-        value_channels=args.value_channels,
-        value_hidden=args.value_hidden,
-        lookahead_K=args.lookahead_k,
-        lookahead_depth=args.lookahead_depth,
-        aggregator_heads=args.aggregator_heads,
-        aggregator_layers=args.aggregator_layers,
-    )
+    if args.arch == 'v3':
+        config = ChessConfigV3(
+            d_model=args.d_model,
+            n_heads=args.n_heads,
+            n_blocks=args.n_blocks,
+            ffn_mult=args.ffn_mult,
+            stem_blocks=args.stem_blocks,
+            geometry_bias=not args.no_geometry_bias,
+            value_hidden=args.value_hidden,
+            checkpoint_every=args.checkpoint_every,
+        )
+    else:
+        config = ChessConfigV2(
+            encoder_blocks=args.blocks,
+            encoder_channels=args.channels,
+            policy_channels=args.policy_channels,
+            value_channels=args.value_channels,
+            value_hidden=args.value_hidden,
+            future_move_heads=args.future_move_heads,
+            lookahead_K=args.lookahead_k,
+            lookahead_depth=args.lookahead_depth,
+            aggregator_heads=args.aggregator_heads,
+            aggregator_layers=args.aggregator_layers,
+        )
 
     train(
         shard_dir=args.shard_dir,
@@ -331,11 +446,14 @@ if __name__ == '__main__':
         epochs=args.epochs,
         max_epochs=args.max_epochs,
         keep_last_n=args.keep_last_n,
+        save_every_steps=args.save_every_steps,
         num_workers=args.num_workers,
         save_name=args.save_name,
         start_epoch=args.start_epoch,
         resume_pt=args.resume,
         no_resume=args.no_resume,
+        warm_start_pt=args.warm_start,
+        future_move_weight=args.future_move_weight,
         value_loss_weight=args.value_loss_weight,
         stop_file=args.stop_file,
     )

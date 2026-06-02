@@ -232,7 +232,12 @@ def main():
                         help='games for the random-mover baseline')
     parser.add_argument('--no-gate', action='store_true',
                         help='Run all SF tiers regardless of prior loss-rate gating')
+    parser.add_argument('--tiers', default=None,
+                        help='Comma-list of SF tiers to run (e.g. '
+                             'sf_easy,sf_med,sf_hard). Overrides gating: runs '
+                             'exactly these tiers. Default=all tiers with gating.')
     args = parser.parse_args()
+    tier_filter = set(args.tiers.split(',')) if args.tiers else None
 
     v2_path = os.path.join(args.save_dir, f'{args.save_name}_e{args.epoch:04d}.pt')
     if not os.path.exists(v2_path):
@@ -252,7 +257,11 @@ def main():
         # Stockfish ladder
         if not args.skip_sf:
             for opp, depth, skill, games, gate in SF_LADDER:
-                if gate is not None and not args.no_gate:
+                if tier_filter is not None:
+                    # Explicit tier list bypasses gating entirely.
+                    if opp not in tier_filter:
+                        continue
+                elif gate is not None and not args.no_gate:
                     g_loss = _most_recent_lost(args.eval_csv, gate)
                     if g_loss is None or g_loss > GATE_PCT:
                         desc = (f'>{GATE_PCT:.0f}% ({g_loss:.0f}%)'
