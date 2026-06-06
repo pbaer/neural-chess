@@ -201,14 +201,18 @@ def _most_recent_lost(csv_path: str, opponent: str):
     return last
 
 
-SF_LADDER = [
-    # (opponent label, depth, skill, games, gate-from)
-    ('sf_easy',   1,  0,  GAMES,        None),
-    ('sf_med',    3,  5,  GAMES,        'sf_easy'),
-    ('sf_hard',   5, 10,  GAMES,        'sf_med'),
-    ('sf_magnus', 8, 20, MAGNUS_GAMES, 'sf_hard'),    # redefined 2026-05-17: was d=15 s=20
-    ('sf_ultra', 16, 20, MAGNUS_GAMES, 'sf_magnus'),  # added 2026-05-17
-]
+def build_sf_ladder(sf_games=GAMES, magnus_games=MAGNUS_GAMES):
+    return [
+        # (opponent label, depth, skill, games, gate-from)
+        ('sf_easy',   1,  0, sf_games,     None),
+        ('sf_med',    3,  5, sf_games,     'sf_easy'),
+        ('sf_hard',   5, 10, sf_games,     'sf_med'),
+        ('sf_magnus', 8, 20, magnus_games, 'sf_hard'),    # redefined 2026-05-17: was d=15 s=20
+        ('sf_ultra', 16, 20, magnus_games, 'sf_magnus'),  # added 2026-05-17
+    ]
+
+
+SF_LADDER = build_sf_ladder()
 
 
 def main():
@@ -232,6 +236,10 @@ def main():
                         help='games for the random-mover baseline')
     parser.add_argument('--no-gate', action='store_true',
                         help='Run all SF tiers regardless of prior loss-rate gating')
+    parser.add_argument('--sf-games', type=int, default=GAMES,
+                        help='games per SF tier for easy/med/hard (default 100)')
+    parser.add_argument('--magnus-games', type=int, default=MAGNUS_GAMES,
+                        help='games for sf_magnus / sf_ultra (default 10)')
     parser.add_argument('--tiers', default=None,
                         help='Comma-list of SF tiers to run (e.g. '
                              'sf_easy,sf_med,sf_hard). Overrides gating: runs '
@@ -256,7 +264,8 @@ def main():
 
         # Stockfish ladder
         if not args.skip_sf:
-            for opp, depth, skill, games, gate in SF_LADDER:
+            for opp, depth, skill, games, gate in build_sf_ladder(
+                    args.sf_games, args.magnus_games):
                 if tier_filter is not None:
                     # Explicit tier list bypasses gating entirely.
                     if opp not in tier_filter:

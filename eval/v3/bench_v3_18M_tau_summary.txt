@@ -1,0 +1,33 @@
+===== STOCKFISH LADDER (v3-18M-tau, e9) =====
+  EVAL 2026-06-04 02:42:58 epoch=9 opp=sf_easy depth=1 skill=0 games=300
+  W:91% D:8% L:1% (W:91% / B:91%) illegal:0.0% (151.7s)
+  EVAL 2026-06-04 02:45:30 epoch=9 opp=sf_med depth=3 skill=5 games=300
+  W:92% D:8% L:0% (W:93% / B:91%) illegal:0.0% (177.1s)
+  EVAL 2026-06-04 02:48:27 epoch=9 opp=sf_hard depth=5 skill=10 games=300
+  W:75% D:18% L:7% (W:77% / B:73%) illegal:0.0% (216.7s)
+  EVAL 2026-06-04 02:52:04 epoch=9 opp=sf_magnus depth=8 skill=20 games=50
+  W:8% D:28% L:64% (W:8% / B:8%) illegal:0.0% (47.8s)
+  EVAL 2026-06-04 02:52:52 epoch=9 opp=sf_ultra depth=16 skill=20 games=50
+  W:0% D:2% L:98% (W:0% / B:0%) illegal:0.0% (535.1s)
+
+===== H2H vs v3-37M (policy, t0.5): 800g temp0.5 (policy) =====
+  W/D/L = 197/284/319   score 0.424   Elo -53  [-73, -34] (95%)
+
+===== H2H vs v3-37M (policy, t0.3): 400g temp0.3 (policy) =====
+  W/D/L = 144/135/121   score 0.529   Elo +20  [-8, +48] (95%)
+
+===== H2H vs v3-18M (policy, t0.5): 800g temp0.5 (policy) =====
+  W/D/L = 368/243/189   score 0.612   Elo +79  [+59, +100] (95%)
+
+===== H2H vs v3-37M (MCTS-50, t0.5): 80g temp0.5 MCTS-50 =====
+  W/D/L = 40/0/40   score 0.500   Elo +0  [-77, +77] (95%)
+
+================================================================
+SUMMARY  (v3-18M-tau = A; Elo > 0 means tau is stronger)
+================================================================
+  vs v3-37M (policy, t0.5)       score 0.424  Elo -53 [-73,-34]
+  vs v3-37M (policy, t0.3)       score 0.529  Elo +20 [-8,+48]
+  vs v3-18M (policy, t0.5)       score 0.612  Elo +79 [+59,+100]
+  vs v3-37M (MCTS-50, t0.5)      score 0.500  Elo +0 [-77,+77]
+
+total bench time 115 min
