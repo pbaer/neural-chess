@@ -1,17 +1,20 @@
 # neural-chess
 
-A chess engine powered by a residual convolutional neural network (CNN), trained on a large corpus of human games. **Two architecture generations live in this repo:**
+A chess engine trained on a large corpus of human games. **Three architecture generations live in this repo:**
 
 - **v1** — 12-plane input, 10×256 residual CNN, ~12M params, trained on 22M positions from ~800k historical games. Policy head only. [Architecture details below](#v1-architecture-original).
-- **v2** — 21-plane history-aware input, residual CNN + policy **and value** heads, a board-rotation trick so the model plays both colors, and a license-clean mixed-Elo corpus. v2 was scaled across several sizes (see [naming convention](#naming-convention)); the current best is **`v2-37M`** (20×320, ~37M params, trained on 100M positions). [Architecture details below](#v2-architecture-current).
+- **v2** — 21-plane history-aware input, residual CNN + policy **and value** heads, a board-rotation trick so the model plays both colors, and a license-clean mixed-Elo corpus. Scaled across several sizes; best v2 is **`v2-37M`** (20×320, ~37M params, 100M positions). [Architecture details below](#v2-architecture-prior-generation).
+- **v3 (current)** — same 21-plane input/output, but the CNN tower is replaced by a **square-token attention tower** (conv stem + transformer blocks with a learned 2D board-geometry bias). Markedly more parameter-efficient: `v3-18M` beats the 2×-larger v2-37M, and **`v3-37M`** (37.4M, acc 62.70%) is the strongest single model. [Architecture details below](#v3-architecture-current).
 
-Both versions share the same `PolicyEngine` runtime interface so a single `play.py` / `uci.py` works for either. Version is auto-detected from the checkpoint.
+A separate, validated win is the **"tau" data recipe** — a position-aggregated corpus (averaged value + soft-policy move histogram + frequency-tempered sampling) that adds ~+79 Elo at equal params; **`v3-18M-tau` ≈ `v3-37M` at half the parameters**. [Details below](#the-tau-data-recipe-position-aggregated). Naming: `v3-<paramsize>-tau`.
 
-**Optional MCTS at inference.** An AlphaZero-style PUCT search (Monte Carlo Tree Search guided by the network — `src/mcts.py`) wraps any v2 model, using only the model's own policy priors and value estimate — no hand-coded chess heuristics. It's an opt-in `play.py --mcts` flag, not the default. See [Playing](#playing) and the [MCTS results](#mcts-results). ("PUCT" is the standard exploration formula the tree uses to decide which move to search deeper.)
+All three generations share the same `PolicyEngine` runtime interface so a single `play.py` / `uci.py` works for any; the architecture is auto-detected from the checkpoint.
+
+**Optional MCTS at inference.** An AlphaZero-style PUCT search (Monte Carlo Tree Search guided by the network — `src/mcts.py`) wraps any v2 or v3 model, using only the model's own policy priors and value estimate — no hand-coded chess heuristics. It's an opt-in `play.py --mcts` flag, not the default. See [Playing](#playing) and the [MCTS results](#mcts-results). ("PUCT" is the standard exploration formula the tree uses to decide which move to search deeper.)
 
 ### Naming convention
 
-v2 model directories under `model/v2/` are named `v2-{params_M}M[-{tag}]` where `{params_M}` is the param count rounded to the nearest million. The optional `-{tag}` (e.g. `-a`/`-b`) only appears when two runs land on the same rounded million but had different architecture experiments. This keeps the directory name honest — "19M" is a fact, not a claim about whether the run was "final" or "best." Earlier experiment-flavored names (`T0a`, `T2_FAT`, `T_FINAL`, etc.) were retroactively renamed under this convention; the lineage is preserved in `memory/v2-build-log.md`.
+Model directories are named `v{N}-{params_M}M[-{tag}]` where `{params_M}` is the param count rounded to the nearest million. The optional `-{tag}` (e.g. `-a`/`-b`) only appears when two runs land on the same rounded million but had different architecture experiments. This keeps the directory name honest — "19M" is a fact, not a claim about whether the run was "final" or "best." v3 follows the same scheme under `model/v3/` (`v3-18M`, `v3-37M`), plus the **`-tau` suffix** for a model trained on the [position-aggregated "tau" data recipe](#the-tau-data-recipe-position-aggregated) (e.g. `v3-18M-tau`). Earlier v2 experiment-flavored names (`T0a`, `T2_FAT`, `T_FINAL`, etc.) were retroactively renamed under this convention; the lineage is preserved in `memory/v2-build-log.md`.
 
 ## Project principles
 
@@ -25,7 +28,41 @@ These rules keep the experiment honest: how strong a chess engine can we build f
 
 ---
 
-## v2 architecture (current)
+## v3 architecture (current)
+
+v3 keeps v2's **input (21 planes, rotation) and output (4,672 move encoding) unchanged** — only the inner tower changes from a CNN to self-attention over the 64 squares. The thesis: a CNN builds long-range board understanding only by stacking many conv layers, whereas self-attention lets any square influence any other in one layer.
+
+```
+Input (21, 8, 8)
+     │
+     ▼
+Conv stem: Conv 21→C, 3×3 + BN + ReLU, then `stem_blocks` (2) conv residual blocks
+     │
+     ▼
+Tokenize (B,C,8,8) → (B,64,C)  +  learned positional embedding   (token = square index)
+     │
+     ▼
+Transformer tower: `n_blocks` pre-norm blocks
+   each: LayerNorm → GeoSelfAttention (+skip) → LayerNorm → FFN ×4 (+skip)
+     │
+     ├──────────────────────┐
+     ▼                      ▼
+Policy head:                Value head:
+  Linear C→73 per token       mean-pool 64 tokens → Linear C→128
+  → (8,8,73) = 4672 logits    → ReLU → Linear→1 → tanh  ∈ [-1,1]
+```
+
+**GeoSelfAttention** adds a *learned 2D relative-position bias* indexed by the (Δrank, Δfile) displacement between squares — this encodes only board **geometry** (the transformer analog of a CNN's translation-equivariance), the one principle-sensitive choice. It provides a uniform learnable slot for all 225 displacements and singles out none; the model must *discover* from games which offsets matter (e.g. knight `(±1,±2)`). It bakes in **no** piece-movement rule (Principle 2). Toggle via `config.geometry_bias`.
+
+| Config | d_model × blocks | Params | Trained on | Notes |
+|--------|------------------|-------:|------------|-------|
+| `v3-18M` | 256 × 20 | 18.3M | 100M positions | beat v2-19M +150 Elo & 2× v2-37M on SF |
+| **`v3-37M`** (best raw) | **384 × 18** | **37.4M** | **100M positions** | acc **62.70%**; strongest single model |
+| `v3-18M-tau` | 256 × 20 | 18.3M | 72M-unique aggregated | the [tau recipe](#the-tau-data-recipe-position-aggregated); ≈ v3-37M at half params |
+
+Config-driven via `ChessConfigV3` (`src/v3/model.py`); knobs `--d-model / --n-heads / --n-blocks / --ffn-mult / --stem-blocks / --no-geometry-bias / --checkpoint-every` in `src/v2/train.py` (with `--arch v3`). Training signal, losses, and the rotation trick are identical to v2.
+
+## v2 architecture (prior generation)
 
 ### Input: 21 planes, history-aware
 
@@ -77,7 +114,7 @@ Policy head:                Value head:
 
 Legend: **Conv** = convolution layer; **BN** = batch normalization (stabilizes training by normalizing each layer's outputs); **ReLU** = rectified linear unit (the standard nonlinearity, `max(0, x)`); **ResNet** = residual network (the `+skip` shortcut adds a block's input to its output, which keeps gradients flowing through deep stacks); **1×1** convs mix channels without looking at neighboring squares.
 
-The encoder depth/width and head widths are all config-driven (`ChessConfigV2`), so v2 spans a scale ladder. The diagram above shows the `v2-19M` config (16×256); the **current best, `v2-37M`, is 20×320 with wider heads** (policy 128, value 8 / hidden 256). Parameter budgets:
+The encoder depth/width and head widths are all config-driven (`ChessConfigV2`), so v2 spans a scale ladder. The diagram above shows the `v2-19M` config (16×256); the **best v2, `v2-37M`, is 20×320 with wider heads** (policy 128, value 8 / hidden 256). Parameter budgets:
 
 | Config | Blocks×Ch | Policy / Value heads | Params | Trained on |
 |--------|-----------|----------------------|-------:|------------|
@@ -121,6 +158,34 @@ The v1 model is a 12-plane residual CNN with a single policy head. Documented in
 - Trained for ~50 epochs on `data/v1/*.npz` (22M positions); cosine learning-rate (LR) schedule; FP16 (16-bit floating-point) mixed precision.
 
 The trained v1 best checkpoint serves as the head-to-head reference opponent during v2 evaluation.
+
+---
+
+## The "tau" data recipe (position-aggregated)
+
+A validated way to make a model stronger by improving the **data**, not the architecture (it applies to any v2/v3 model). The standard shards label each position with *that one game's* single outcome and the *one* move played; openings are also seen millions of times (frequency-weighted). The tau recipe instead **aggregates the corpus by unique position** and stores richer, lower-noise targets:
+
+- **Averaged value `Q`** — mean game outcome over *all* games reaching the position (a denoised win-probability target), instead of one game's noisy ±1/0.
+- **Soft-policy move histogram** — the full distribution of human moves from the position (a richer label than a single move; KL target).
+- **count** — how many games reached it, used for **frequency-tempered sampling** `P(sample) ∝ count^τ`. `τ=1` reproduces today's frequency weighting; `τ=0` is uniform over unique positions; **`τ≈0.5`** down-weights over-represented openings without flattening to the noisy long tail.
+
+All three are still *observed* quantities (averages/histograms of real human games) — Principle-1/2 clean, no engine signal. Position identity is the polyglot Zobrist key (placement + side + castling + capturable-EP; transpositions merge, colors don't).
+
+```bash
+# 1) Aggregate the filtered PGNs into a position-keyed corpus (memmap artifact)
+python -m src.v3.aggregate --out-dir data/v2/agg_100M --instances 100000000 --cap-unique 72000000
+
+# 2) Train any v3 config on it with the recipe knobs
+python -m src.v3.train_agg --agg-dir data/v2/agg_100M \
+    --save-dir model/v3/v3-18M-tau --save-name v3-18M-tau \
+    --value-mode avg --policy-mode soft --tau 0.5 \
+    --d-model 256 --n-blocks 20 --epochs 10 --epoch-size 40000000 \
+    --num-workers 16 --save-every-steps 5000
+```
+
+`aggregate.py` streams `(row, move)` pairs to a flat array and builds the move histogram via a vectorized sort/group (so the full ~72M-unique corpus aggregates in ~10 GB RAM). `train_agg.py` adds a numpy-based frequency sampler (torch's `WeightedRandomSampler` caps at 2²⁴ categories — too few for 70M positions) and per-worker memmap sharing. Naming convention for recipe models: **`v3-<paramsize>-tau`**.
+
+**Result:** `v3-18M-tau` gains **~+79 Elo** over a same-size model on the old data, the advantage *grows* with data volume, and it **≈ matches the 2×-larger `v3-37M`** at low temperature / under MCTS / on the Stockfish ladder — at half the parameters. Full write-up in `memory/position-aggregated-dataset.md`.
 
 ---
 
@@ -175,10 +240,12 @@ The v2 pipeline is **three sequential steps** living in `data/v2/_acquire/`. The
 |-------|------------:|
 | Raw archives (Lichess Elite + monthly + TWIC zips/zsts) | ~6 GB |
 | Filtered tier PGNs | ~1.1 GB |
-| 40M-position training shard (binary memmap) | ~10.8 GB |
 | 8M shard (smaller smoke-test) | ~2.2 GB |
+| 40M-position training shard (binary memmap) | ~10.8 GB |
+| 100M shard (trained v2-37M / v3-37M) | ~134 GB |
+| Position-aggregated "tau" corpus (`agg_100M`, 72M unique) | ~92 GB |
 
-Reserve **~25 GB** of free disk space for a comfortable v2 reconstruction.
+Reserve **~25 GB** for a small (≤40M) reconstruction; the full 100M shard and the tau corpus need **~230 GB** between them.
 
 #### Step 1 — Download raw sources
 
@@ -257,9 +324,26 @@ python -m src.v2.test_dataset_hardening   # 5 smoke tests; takes ~4 sec
 
 ## Training
 
-### v2 (current)
+`src/v2/train.py` trains **both** v2 (CNN) and v3 (attention) — pass `--arch v3` for the attention tower. The tau-recipe trainer is the separate `src/v3/train_agg.py` (see [the tau recipe](#the-tau-data-recipe-position-aggregated)).
 
-The exact command that trained the current-best `v2-37M`:
+### v3 (current)
+
+The command that trained the strongest model, `v3-37M` (attention, 384×18, 100M shard):
+
+```bash
+python -m src.v2.train --arch v3 \
+    --shard-dir data/v2/training_T1_rot_100M \
+    --save-dir model/v3/v3-37M --save-name model \
+    --d-model 384 --n-heads 8 --n-blocks 18 \
+    --epochs 10 --max-epochs 10 --batch-size 1024 --lr 6e-4 \
+    --checkpoint-every 1 --num-workers 8 --save-every-steps 3500
+```
+
+Notes specific to v3: `--checkpoint-every 1` enables gradient checkpointing (keeps the 37M tower at ~5.3 GB VRAM); `--d-model / --n-heads / --n-blocks / --ffn-mult / --stem-blocks / --no-geometry-bias` configure the tower. Everything else (BF16, cosine LR, auto-resume, `.stop`, losses) is shared with v2 below. v3 checkpoints carry `arch='v3'` and load via the same `play.py` / eval path. **On the current (degraded) training box, disable CPU Turbo Boost before long runs and use `--save-every-steps`** — see `memory/training-hardware-stability.md` / `CrashAnalysis.md`.
+
+### v2 (prior generation)
+
+The exact command that trained `v2-37M`:
 
 ```bash
 python -m src.v2.train \
@@ -339,7 +423,7 @@ Options:
 
 ### With MCTS
 
-Add `--mcts` to wrap a v2 model in PUCT search (v2 only — needs a value head):
+Add `--mcts` to wrap a model in PUCT search (any v2 or v3 model — needs a value head):
 
 ```bash
 python play.py model/v2/v2-37M/model_e0007.pt engine --games 10 --depth 16 --skill 20 \
@@ -387,14 +471,24 @@ Player specs: `interactive` / `agent[:LABEL]` / `neural-chess:<path>` / `stockfi
 
 ## Evaluation
 
-### v2 — SF ladder + head-to-head (h2h) vs v1
+### SF ladder + head-to-head (works for v2 **and** v3)
+
+`eval/v2/eval_v2.py` is architecture-agnostic (it drives `play.py`, which auto-detects the checkpoint arch), so it evaluates v3 models too — just point `--save-dir`/`--save-name` at a v3 checkpoint:
 
 ```bash
+# v3 example
+python eval/v2/eval_v2.py 9 \
+    --save-dir model/v3/v3-37M --save-name model \
+    --eval-csv eval/v3/eval_v3-37M.csv --no-gate
+
+# v2 example
 python eval/v2/eval_v2.py <epoch> \
     --save-dir model/v2/v2-37M --save-name model \
     --eval-csv eval/v2/eval_v2-37M.csv \
     --no-gate
 ```
+
+`--sf-games N` / `--magnus-games N` raise the per-tier game counts for tighter signal (defaults 100 / 10).
 
 Runs the Stockfish ladder, a uniform-random-mover baseline, and a head-to-head against the v1 best (`model/v1/checkpoints/model_e0009.pt` by default):
 
@@ -409,12 +503,18 @@ Runs the Stockfish ladder, a uniform-random-mover baseline, and a head-to-head a
 
 By default, higher SF tiers are gated by ≤10% loss at the previous tier; `--no-gate` runs all. `--skip-h2h` / `--skip-sf` / `--skip-random` limit which sections run. Results append to a CSV with schema `epoch,timestamp,opponent,games,won_pct,draw_pct,lost_pct,white_won_pct,black_won_pct,illegal_pct,moves,elapsed_s`.
 
-Other v2 eval/analysis tools in `eval/v2/`:
+Other eval/analysis tools in `eval/v2/`:
 - **`mcts_sweep.py`** — sweep MCTS settings (sims, c_puct) vs the SF ladder + raw self
 - **`vs_random.py`** — multi-model random-mover gauntlet
 - **`analyze_v2.py`** — parameter-utilization analysis (BN gammas, per-block contribution)
 - **`startpos_value.py`** — what value each model assigns the start position vs the empirical corpus white-advantage
 - **`mcts_vs_ultra_timed.py`** — timed match harness (sums each side's thinking time)
+
+v3 / tau-recipe tools in `eval/v3/`:
+- **`bakeoff_h2h.py`** — head-to-head between two checkpoints (used for the v3-vs-v2 bake-offs)
+- **`agg_sweep.py` / `agg_report.py`** — sweep + rank tau data treatments (value/policy/τ) at matched compute
+- **`agg_h2h.py` / `agg_h2h_mcts.py`** — generic policy / MCTS head-to-head between any two checkpoints
+- **`bench_v3_18M_tau.py`** — comprehensive benchmark (SF ladder + large-N h2h with Elo±CI + MCTS)
 
 ### v1 — multi-checkpoint vs SF
 
@@ -430,7 +530,15 @@ Other v1 analysis scripts (opening diversity, castling/EP rates, temperature swe
 
 ## Results
 
-### Current best model: `v2-37M` (raw, single forward pass)
+### Current best: `v3-37M` (attention) and `v3-18M-tau` (efficiency)
+
+**`v3-37M`** is the strongest single model — top-1 move accuracy **62.70%**. Raw single forward pass vs Stockfish: sf_easy 94%, sf_med **96%**, sf_hard **81%** wins (vs v2-37M's 65%); with **MCTS-50 it reaches 0.60 vs sf_magnus (d8)**, the best Magnus-tier result in the project. Head-to-head it beats the same-size v2-37M CNN **0.645 (≈ +100 Elo)** — and at 18M, `v3-18M` beat v2-19M by **≈ +150 Elo**, confirming attention is more parameter-efficient than the CNN.
+
+**`v3-18M-tau`** (the [tau data recipe](#the-tau-data-recipe-position-aggregated) at 18M) shows data ≈ capacity: **+79 Elo** over a same-size old-data model, and it **matches `v3-37M`** at low temperature (h2h ≈ even at temp 0.3) and **under MCTS-50 (40W/0D/40L, dead even)** — at half the parameters. The 2× model only pulls ahead under higher-temperature sampling. SF ladder: med 0.96, hard 0.84.
+
+> Nuance: v3's edge over v2 is a **policy** win — at matched data the value head is a near-tie with the CNN (signal-limited). The tau recipe's averaged value is what improves the value head (and thus MCTS).
+
+### `v2-37M` (CNN, prior best — raw, single forward pass)
 
 | Opponent | W / D / L | Notes |
 |----------|-----------|-------|
@@ -483,12 +591,14 @@ neural-chess/
 │       ├── _acquire/        # download.py / filter.py / etc.
 │       ├── raw/             # raw downloaded archives
 │       ├── filtered/        # tier_top/mid/low.pgn after filter step
-│       └── training_T1_rot*/        # featurized shards (8M / 40M / 100M)
+│       ├── training_T1_rot*/        # featurized shards (8M / 40M / 100M) for v2/v3
+│       └── agg_100M/        # position-aggregated "tau" corpus (avg value + move histogram + count)
 ├── model/                   # gitignored — checkpoints per version
 │   ├── v1/checkpoints/
-│   └── v2/v2-{2..37}M*/     # the v2 scale ladder; v2-37M (20×320, 100M data) is current best
+│   ├── v2/v2-{2..37}M*/     # the v2 CNN scale ladder; v2-37M (20×320, 100M data) is best v2
+│   └── v3/                  # attention tower: v3-18M, v3-37M (best raw), v3-18M-tau (tau recipe)
 ├── src/
-│   ├── inference_api.py     # PolicyEngine abstract base + load_policy_engine factory
+│   ├── inference_api.py     # PolicyEngine abstract base + load_policy_engine factory (arch auto-detect)
 │   ├── engine.py            # Stockfish/UCI helpers
 │   ├── game_loop.py         # engine-vs-engine game runner
 │   ├── mcts.py              # AlphaZero-style PUCT MCTS + MCTSEngine wrapper
@@ -498,13 +608,18 @@ neural-chess/
 │   ├── play_session.py      # stateful session-based play harness
 │   ├── v1/
 │   │   ├── model.py / featurize.py / dataset.py / train.py / inference.py / parse_pgn.py
-│   └── v2/
-│       ├── model.py / featurize.py / moves.py / dataset.py / train.py / inference.py
-│       ├── lookahead.py     # disabled experimental lookahead block (ablated; still needed to load v2-3M)
-│       └── test_dataset_hardening.py
+│   ├── v2/
+│   │   ├── model.py / featurize.py / moves.py / dataset.py / train.py / inference.py
+│   │   ├── lookahead.py     # disabled experimental lookahead block (ablated; still needed to load v2-3M)
+│   │   └── test_dataset_hardening.py
+│   └── v3/
+│       ├── model.py / inference.py     # attention tower + V3PolicyEngine
+│       ├── aggregate.py     # build the position-aggregated "tau" corpus
+│       └── train_agg.py     # train on the tau corpus (avg value + soft policy + count^τ)
 ├── eval/
 │   ├── v1/                  # evaluate.py, eval_one.py, opening/castling/temp analyses
-│   └── v2/                  # eval_v2.py, mcts_sweep.py, vs_random.py, analyze_v2.py, startpos_value.py, mcts_vs_ultra_timed.py
+│   ├── v2/                  # eval_v2.py, mcts_sweep.py, vs_random.py, analyze_v2.py, startpos_value.py, mcts_vs_ultra_timed.py
+│   └── v3/                  # bakeoff_h2h.py, agg_sweep/report/h2h/h2h_mcts.py, bench_v3_18M_tau.py
 ├── logs/                    # gitignored — training/eval logs
 └── tmp/                     # gitignored — play_sessions/, scratch
 ```
