@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neural Chess — play a tiny chess transformer</title>
+    <meta
+      name="description"
+      content="Play a tiny square-token chess transformer running entirely in your browser — one hand-written forward pass per move."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231d222b'/%3E%3Ctext x='16' y='24' font-size='22' text-anchor='middle' fill='%237ec4ff'%3E%E2%99%9E%3C/text%3E%3C/svg%3E"
+    />
+    <script>
+      // Set the theme before first paint (no flash). Stored choice wins, else the
+      // OS preference, else dark. Only affects site chrome — not the heatmap scales.
+      (function () {
+        try {
+          var t = localStorage.getItem('nc-theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          document.documentElement.dataset.theme = t;
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

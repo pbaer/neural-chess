@@ -1,0 +1,13 @@
+{
+  "d_model": 32,
+  "n_heads": 4,
+  "n_blocks": 8,
+  "ffn_mult": 4,
+  "stem_blocks": 0,
+  "stem_kernel": 1,
+  "geometry_bias": true,
+  "value_hidden": 64,
+  "checkpoint_every": 0,
+  "input_planes": 21,
+  "output_size": 4672
+}
