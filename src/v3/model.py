@@ -40,7 +40,13 @@ class ChessConfigV3:
     n_blocks: int = 20          # transformer encoder blocks
     ffn_mult: int = 4           # FFN hidden = ffn_mult * d_model
     stem_blocks: int = 2        # conv residual blocks in the stem
+    stem_kernel: int = 3        # input-conv kernel size; 1 + stem_blocks=0 = pure
+                                # per-square embed, NO conv locality ("v3.1" ablation)
     geometry_bias: bool = True  # 2D relative-position bias (board geometry)
+    use_pos_emb: bool = True    # absolute square-identity embedding; off = rely on
+                                # geometry_bias alone for position ("R4" ablation)
+    share_blocks: bool = False  # reuse ONE transformer block across all n_blocks
+                                # (ALBERT-style cross-layer sharing; "R6" ablation)
     value_hidden: int = 128
     # Gradient checkpointing granularity (memory<->compute tradeoff):
     #   0 = none (fastest, most memory); 1 = every block; N = every Nth block.
@@ -131,15 +137,23 @@ class ChessModelV3(nn.Module):
         C = config.d_model
 
         # Conv stem: lift 21 planes -> C, inject local geometry cheaply.
-        self.input_conv = nn.Conv2d(config.input_planes, C, 3, padding=1, bias=False)
+        self.input_conv = nn.Conv2d(config.input_planes, C, config.stem_kernel,
+                                    padding=config.stem_kernel // 2, bias=False)
         self.input_bn = nn.BatchNorm2d(C)
         self.relu = nn.ReLU(inplace=True)
         self.stem = nn.Sequential(*[ResidualBlock(C) for _ in range(config.stem_blocks)])
 
         # Token positional embedding (absolute square identity) + transformer tower.
-        self.pos_emb = nn.Parameter(torch.zeros(1, 64, C))
-        nn.init.trunc_normal_(self.pos_emb, std=0.02)
-        self.blocks = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_blocks)])
+        self.use_pos_emb = config.use_pos_emb
+        if config.use_pos_emb:
+            self.pos_emb = nn.Parameter(torch.zeros(1, 64, C))
+            nn.init.trunc_normal_(self.pos_emb, std=0.02)
+        # Weight-sharing: one block reused n_blocks times, else n distinct blocks.
+        self.share_blocks = config.share_blocks
+        if config.share_blocks:
+            self.block = TransformerBlock(config)
+        else:
+            self.blocks = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_blocks)])
         self.final_ln = nn.LayerNorm(C)
 
         # Heads (fixed interface). Policy: per-token -> 73 move-types.
@@ -154,9 +168,11 @@ class ChessModelV3(nn.Module):
         h = self.stem(h)
         # Tokenize: (B,C,8,8) -> (B,64,C), token s = h*8+w (matches square index)
         t = h.flatten(2).transpose(1, 2)                   # (B, 64, C)
-        t = t + self.pos_emb
+        if self.use_pos_emb:
+            t = t + self.pos_emb
         ckpt = self.config.checkpoint_every
-        for i, blk in enumerate(self.blocks):
+        for i in range(self.config.n_blocks):
+            blk = self.block if self.share_blocks else self.blocks[i]
             if self.training and ckpt > 0 and (i % ckpt == 0):
                 t = torch.utils.checkpoint.checkpoint(blk, t, use_reentrant=False)
             else:

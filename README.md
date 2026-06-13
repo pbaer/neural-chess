@@ -8,6 +8,9 @@ A chess engine trained on a large corpus of human games. **Three architecture ge
 
 A separate, validated win is the **"tau" data recipe** — a position-aggregated corpus (averaged value + soft-policy move histogram + frequency-tempered sampling) that adds ~+79 Elo at equal params; **`v3-18M-tau` ≈ `v3-37M` at half the parameters**. [Details below](#the-tau-data-recipe-position-aggregated). Naming: `v3-<paramsize>-tau`.
 
+- **v3.1 — a leaner architecture (no conv stem).** Teaching-model work showed the v3 conv stem is droppable: a **pure square-token transformer** (`stem_kernel=1, stem_blocks=0`) is *smaller and stronger* at small scale, and a full ablation pass ("v3.2") confirmed the result is tight — every remaining component is load-bearing. **v3.1 is the validated lean architecture** and the recommended shape for the next big model (`v3.1-37M-tau`). [Details below](#v31--the-lean-no-conv-architecture-teaching-models--true-minimum).
+- **Neural Chess web tool (`viz/`).** A browser app that runs a hand-written TypeScript forward pass of the tiny v3.1 hero and lets you **play** it *and* **inspect** every weight/activation from the architecture diagram down to a single scalar. [Details below](#neural-chess-web-tool-viz) · [viz/README.md](viz/README.md).
+
 All three generations share the same `PolicyEngine` runtime interface so a single `play.py` / `uci.py` works for any; the architecture is auto-detected from the checkpoint.
 
 **Optional MCTS at inference.** An AlphaZero-style PUCT search (Monte Carlo Tree Search guided by the network — `src/mcts.py`) wraps any v2 or v3 model, using only the model's own policy priors and value estimate — no hand-coded chess heuristics. It's an opt-in `play.py --mcts` flag, not the default. See [Playing](#playing) and the [MCTS results](#mcts-results). ("PUCT" is the standard exploration formula the tree uses to decide which move to search deeper.)
@@ -61,6 +64,8 @@ Policy head:                Value head:
 | `v3-18M-tau` | 256 × 20 | 18.3M | 72M-unique aggregated | the [tau recipe](#the-tau-data-recipe-position-aggregated); ≈ v3-37M at half params |
 
 Config-driven via `ChessConfigV3` (`src/v3/model.py`); knobs `--d-model / --n-heads / --n-blocks / --ffn-mult / --stem-blocks / --no-geometry-bias / --checkpoint-every` in `src/v2/train.py` (with `--arch v3`). Training signal, losses, and the rotation trick are identical to v2.
+
+> **The conv stem is optional — and best dropped.** Setting `stem_kernel=1, stem_blocks=0` removes it for a **pure square-token transformer ("v3.1")**, which is *smaller and stronger* at the scales tested and is the validated lean architecture (see [v3.1 — the lean (no-conv) architecture](#v31--the-lean-no-conv-architecture-teaching-models--true-minimum)). The big v3 models in the table above predate this finding and still include the stem; the teaching/hero models and the planned next big model drop it.
 
 ## v2 architecture (prior generation)
 
@@ -188,6 +193,32 @@ python -m src.v3.train_agg --agg-dir data/v2/agg_100M \
 **Result:** `v3-18M-tau` gains **~+79 Elo** over a same-size model on the old data, the advantage *grows* with data volume, and it **≈ matches the 2×-larger `v3-37M`** at low temperature / under MCTS / on the Stockfish ladder — at half the parameters. Full write-up in `memory/position-aggregated-dataset.md`.
 
 ---
+
+## v3.1 — the lean (no-conv) architecture, teaching models & true-minimum
+
+A line of tiny "teaching" models (small enough that **every weight/activation is browsable** — see the [web tool](#neural-chess-web-tool-viz)) drove a real architecture finding that feeds back into the big models. Full campaign report: `eval/v3/teaching_models_report.md`; durable findings in `memory/teaching-models-tau.md` and `memory/v3.2-ablation-verdict.md`.
+
+**v3.1 = drop the conv stem.** Replacing the conv stem with a 1×1 per-square embed (`stem_kernel=1, stem_blocks=0`) gives a **pure square-token transformer**. At small scale it's *smaller and stronger*: the 116k `v3.1-eq` (d32/h4/b8, no conv) beats Stockfish-easiest **77%**, vs 58% for the 159k conv-stem `v3-nano-tau` (+19pp at −42k params); at equal params, spending the conv's budget on more attention blocks also wins. Attention + the relative geometry bias already cover locality — the conv stem is dead weight.
+
+**v3.2 ablation = v3.1 is tight.** A full hunt for further dead weight found none: removing the geometry bias is catastrophic (sf_easy 77→5%), removing the positional embedding costs −17pp, halving heads −19pp, and cross-block weight-sharing is fatal — every component earns its keep. Trading FFN width for depth is a wash (a *style* knob — deeper plays better vs stronger opponents at the same prediction accuracy — not a strength win). **Conclusion: v3.1 is the architecture; there is no "v3.2."** Full table: `memory/v3.2-ablation-verdict.md`.
+
+**True minimum.** Scaling v3.1 down, the smallest net that still beats Stockfish-easiest is **d24/b8 ≈ 70.6k params** (~52% wins, confirmed over 520 games). Below it the strength cliff is steep and **width-bound** (d20→37%, d16→19%, d12→11%); depth can't rescue narrow width. Checkpoint: `model/v3/truemin/T1-d24b8/`.
+
+### Fast in-RAM trainer (tau recipe, bit-packed)
+
+`src/v3/pack_agg.py` + `src/v3/train_agg_fast.py` are a **~13–25× faster** path for the tau recipe. 20 of the 21 input planes are binary after int8 truncation, so the 97 GB `agg_100M` memmap bit-packs to **16 GB** (`data/v2/agg_100M_packed/`, round-trip bit-exact), loads fully into RAM, and the GPU bit-unpacks each batch — eliminating the disk-I/O bottleneck that capped `train_agg.py` at ~2k samp/s. Exposes the v3.1/v3.2 knobs `--stem-kernel --stem-blocks --ffn-mult --value-hidden --no-geometry-bias --no-pos-emb --share-blocks`. Used for every teaching model; the recommended trainer for the next big model.
+
+## Neural Chess web tool (`viz/`)
+
+A public, static, **educational** browser app (React + Vite + TypeScript) that runs a **hand-written TypeScript forward pass** (no ONNX; PyTorch-parity-verified, identical argmax) of the 116k v3.1 hero and lets you:
+- **play** it — one-shot inference per move, with a value-head readout and an optional top-5 move picker, and
+- **inspect** it — a "Model Inspector" telescope from the architecture diagram down to individual attention weights tied to the 64 board squares, with contextual explanations.
+
+It is **architecture-version-neutral**: it never reads a `.pt`, only a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` graph + `weights.bin` + `config.json`), so it renders whatever architecture the capsule declares. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
+
+## Roadmap — next big model
+
+The next big-model run stacks the three validated levers: **`v3.1-37M-tau`** = the v3.1 (no-conv) architecture + the tau data recipe + ~37M capacity (matching the current best raw model `v3-37M`, so the comparison isolates the gain). Train with `train_agg_fast.py` in BF16, ~10–16 epochs, `--save-every-steps`; eval on the full SF ladder + h2h vs v3-37M; projected ≈ +79 Elo from tau alone. **Caveat:** no-conv is validated only at ~116k, so an 18M conv-vs-no-conv A/B is cheap insurance before committing the full run. Also pending: ship the already-trained `v3-18M-tau` as the efficient model. Full plan + risks (incl. the degraded training box, RMA pending): `memory/future-architecture-roadmap.md`.
 
 ## Setup
 
@@ -592,11 +623,17 @@ neural-chess/
 │       ├── raw/             # raw downloaded archives
 │       ├── filtered/        # tier_top/mid/low.pgn after filter step
 │       ├── training_T1_rot*/        # featurized shards (8M / 40M / 100M) for v2/v3
-│       └── agg_100M/        # position-aggregated "tau" corpus (avg value + move histogram + count)
+│       ├── agg_100M/        # position-aggregated "tau" corpus (avg value + move histogram + count)
+│       └── agg_100M_packed/ # bit-packed RAM-resident "tau" corpus (16 GB) for train_agg_fast.py
 ├── model/                   # gitignored — checkpoints per version
 │   ├── v1/checkpoints/
 │   ├── v2/v2-{2..37}M*/     # the v2 CNN scale ladder; v2-37M (20×320, 100M data) is best v2
 │   └── v3/                  # attention tower: v3-18M, v3-37M (best raw), v3-18M-tau (tau recipe)
+│       ├── v3.1/            # pure-transformer (no conv) ablation: v3.1-eq (116k hero), v3.1-pm
+│       ├── v3.2/            # v3.2 ablation runs (R1..R8 — all confirmed v3.1 is tight)
+│       ├── truemin/         # true-minimum scale pass (smallest v3.1 beating sf_easy = d24/b8 ~70.6k)
+│       ├── v3-micro-tau/, v3-nano-tau/   # teaching models (conv-stem era)
+│       └── v3.1-nano/       # exported-hero checkpoint (= v3.1-eq) backing the web-tool capsule
 ├── src/
 │   ├── inference_api.py     # PolicyEngine abstract base + load_policy_engine factory (arch auto-detect)
 │   ├── engine.py            # Stockfish/UCI helpers
@@ -613,13 +650,23 @@ neural-chess/
 │   │   ├── lookahead.py     # disabled experimental lookahead block (ablated; still needed to load v2-3M)
 │   │   └── test_dataset_hardening.py
 │   └── v3/
-│       ├── model.py / inference.py     # attention tower + V3PolicyEngine
+│       ├── model.py / inference.py     # attention tower (+ v3.1/v3.2 toggles) + V3PolicyEngine
 │       ├── aggregate.py     # build the position-aggregated "tau" corpus
-│       └── train_agg.py     # train on the tau corpus (avg value + soft policy + count^τ)
+│       ├── train_agg.py     # train on the tau corpus (avg value + soft policy + count^τ)
+│       ├── pack_agg.py      # bit-pack agg_100M → agg_100M_packed (97 GB → 16 GB, RAM-resident)
+│       └── train_agg_fast.py  # fast in-RAM bit-packed tau trainer (~13–25×; v3.1/v3.2 flags)
 ├── eval/
 │   ├── v1/                  # evaluate.py, eval_one.py, opening/castling/temp analyses
 │   ├── v2/                  # eval_v2.py, mcts_sweep.py, vs_random.py, analyze_v2.py, startpos_value.py, mcts_vs_ultra_timed.py
 │   └── v3/                  # bakeoff_h2h.py, agg_sweep/report/h2h/h2h_mcts.py, bench_v3_18M_tau.py
+│                            #   teaching/ablation orchestrators: run_micro_campaign, run_nano_search,
+│                            #   run_v3_1_ablation, run_v3_2_explore, run_v3_2_batch2, run_v3_truemin
+│                            #   + teaching_models_report.md
+├── viz/                     # Neural Chess web tool (React + Vite + TS) — see viz/README.md
+│   ├── src/core/            # presentation-agnostic: engine + trace + model-graph + content + game
+│   ├── src/presentations/desktop/   # React desktop UI (play + Model Inspector telescope)
+│   ├── public/weights/v3.1-nano/    # the hero Model Capsule (capsule.json + weights.bin + config.json)
+│   └── scripts/export/export_model.py   # checkpoint → versioned Model Capsule
 ├── logs/                    # gitignored — training/eval logs
 └── tmp/                     # gitignored — play_sessions/, scratch
 ```
