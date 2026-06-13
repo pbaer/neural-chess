@@ -15,11 +15,11 @@ A separate, validated win is the **"tau" data recipe** — a position-aggregated
 
 All three generations share the same `PolicyEngine` runtime interface so a single `play.py` / `uci.py` works for any; the architecture is auto-detected from the checkpoint.
 
-**Optional MCTS at inference.** An AlphaZero-style PUCT search (Monte Carlo Tree Search guided by the network — `src/mcts.py`) wraps any v2 or v3 model, using only the model's own policy priors and value estimate — no hand-coded chess heuristics. It's an opt-in `play.py --mcts` flag, not the default. See [Playing](#playing) and the [MCTS results](#mcts-results). ("PUCT" is the standard exploration formula the tree uses to decide which move to search deeper.)
+**Optional MCTS at inference.** An AlphaZero-style PUCT search (Monte Carlo Tree Search guided by the network — `src/mcts.py`) wraps any v2 or v3 model, using only the model's own policy priors and value estimate — no hand-coded chess heuristics. Enable it with the `play.py --mcts` flag; a single forward pass is the default. See [Playing](#playing) and the [MCTS results](#mcts-results). ("PUCT" is the standard exploration formula the tree uses to decide which move to search deeper.)
 
 ### Naming convention
 
-Model directories are named `v{N}-{params_M}M[-{tag}]` where `{params_M}` is the param count rounded to the nearest million. The optional `-{tag}` (e.g. `-a`/`-b`) only appears when two runs land on the same rounded million but had different architecture experiments. This keeps the directory name honest — "19M" is a fact, not a claim about whether the run was "final" or "best." v3 follows the same scheme under `model/v3/` (`v3-18M`, `v3-37M`), plus the **`-tau` suffix** for a model trained on the [position-aggregated "tau" data recipe](#the-tau-data-recipe-position-aggregated) (e.g. `v3-18M-tau`). Earlier v2 experiment-flavored names (`T0a`, `T2_FAT`, `T_FINAL`, etc.) were retroactively renamed under this convention; the lineage is preserved in `memory/v2-build-log.md`.
+Model directories are named `v{N}-{params_M}M[-{tag}]` where `{params_M}` is the param count rounded to the nearest million. The optional `-{tag}` (e.g. `-a`/`-b`) only appears when two runs land on the same rounded million but had different architecture experiments. So the directory name just states the size — "19M" carries no "final" or "best" label. v3 follows the same scheme under `model/v3/` (`v3-18M`, `v3-37M`), plus the **`-tau` suffix** for a model trained on the [position-aggregated "tau" data recipe](#the-tau-data-recipe-position-aggregated) (e.g. `v3-18M-tau`). Earlier v2 experiment-flavored names (`T0a`, `T2_FAT`, `T_FINAL`, etc.) were retroactively renamed under this convention; the lineage is preserved in `memory/v2-build-log.md`.
 
 ## Project principles
 
@@ -29,7 +29,7 @@ Three load-bearing rules govern every design decision:
 2. **Pen-and-paper signal only.** Supervision targets are limited to what's observable in the games (positions, moves played, outcomes). No computed chess features (material counts, pawn-structure heuristics, king-safety scores, mobility, etc.) — the model must learn what matters from raw observation.
 3. **Single forward pass by default — with one principled search exception.** The default inference mode is one forward pass producing one move; no hand-coded search heuristics ever. The **one carve-out** is AlphaZero-style PUCT MCTS *whose tree uses only the model's own policy `P` and value `V`* — no material terms, piece-square tables, or pruning heuristics. That injects no chess knowledge the model didn't already have; the tree just lets the model think harder. Alpha-beta with a hand-coded eval, or "run the model N times and average," remain disallowed. See `memory/project-principles.md` for the full carve-out.
 
-These rules keep the experiment honest: how strong a chess engine can we build from human-game observation plus (optionally) the model amplifying its own judgment via search — with zero external chess intelligence injected?
+These rules frame the question: how strong a chess engine can we build from human-game observation plus (optionally) the model amplifying its own judgment via search — with zero external chess intelligence injected?
 
 ---
 
@@ -172,13 +172,13 @@ The trained v1 best checkpoint serves as the head-to-head reference opponent dur
 
 ## The "tau" data recipe (position-aggregated)
 
-A validated way to make a model stronger by improving the **data**, not the architecture (it applies to any v2/v3 model). The standard shards label each position with *that one game's* single outcome and the *one* move played; openings are also seen millions of times (frequency-weighted). The tau recipe instead **aggregates the corpus by unique position** and stores richer, lower-noise targets:
+A validated way to make a model stronger by improving the **data** rather than the architecture (it applies to any v2/v3 model). The standard shards label each position with *that one game's* single outcome and the *one* move played; openings are also seen millions of times (frequency-weighted). The tau recipe instead **aggregates the corpus by unique position** and stores richer, lower-noise targets:
 
 - **Averaged value `Q`** — mean game outcome over *all* games reaching the position (a denoised win-probability target), instead of one game's noisy ±1/0.
 - **Soft-policy move histogram** — the full distribution of human moves from the position (a richer label than a single move; KL target).
 - **count** — how many games reached it, used for **frequency-tempered sampling** `P(sample) ∝ count^τ`. `τ=1` reproduces today's frequency weighting; `τ=0` is uniform over unique positions; **`τ≈0.5`** down-weights over-represented openings without flattening to the noisy long tail.
 
-All three are still *observed* quantities (averages/histograms of real human games) — Principle-1/2 clean, no engine signal. Position identity is the polyglot Zobrist key (placement + side + castling + capturable-EP; transpositions merge, colors don't).
+All three are still *observed* quantities (averages/histograms over human games) — Principle-1/2 clean, no engine signal. Position identity is the polyglot Zobrist key (placement + side + castling + capturable-EP; transpositions merge, colors don't).
 
 ```bash
 # 1) Aggregate the filtered PGNs into a position-keyed corpus (memmap artifact)
@@ -200,11 +200,11 @@ python -m src.v3.train_agg --agg-dir data/v2/agg_100M \
 
 ## v3.1 — the lean (no-conv) architecture, teaching models & true-minimum
 
-A line of tiny "teaching" models (small enough that **every weight/activation is browsable** — see the [web tool](#neural-chess-web-tool-viz)) drove a real architecture finding that feeds back into the big models. Full campaign report: `eval/v3/teaching_models_report.md`; durable findings in `memory/teaching-models-tau.md` and `memory/v3.2-ablation-verdict.md`.
+A line of tiny "teaching" models (small enough that **every weight/activation is browsable** — see the [web tool](#neural-chess-web-tool-viz)) drove an architecture finding that feeds back into the big models. Full campaign report: `eval/v3/teaching_models_report.md`; durable findings in `memory/teaching-models-tau.md` and `memory/v3.2-ablation-verdict.md`.
 
 **v3.1 = drop the conv stem.** Replacing the conv stem with a 1×1 per-square embed (`stem_kernel=1, stem_blocks=0`) gives a **pure square-token transformer**. At small scale it's *smaller and stronger*: the 116k `v3.1-eq` (d32/h4/b8, no conv) beats Stockfish-easiest **77%**, vs 58% for the 159k conv-stem `v3-nano-tau` (+19pp at −42k params); at equal params, spending the conv's budget on more attention blocks also wins. Attention + the relative geometry bias already cover locality — the conv stem is dead weight.
 
-**v3.2 ablation = v3.1 is tight.** A full hunt for further dead weight found none: removing the geometry bias is catastrophic (sf_easy 77→5%), removing the positional embedding costs −17pp, halving heads −19pp, and cross-block weight-sharing is fatal — every component earns its keep. Trading FFN width for depth is a wash (a *style* knob — deeper plays better vs stronger opponents at the same prediction accuracy — not a strength win). **Conclusion: v3.1 is the architecture; there is no "v3.2."** Full table: `memory/v3.2-ablation-verdict.md`.
+**v3.2 ablation = v3.1 is tight.** A full hunt for further dead weight found none: removing the geometry bias is catastrophic (sf_easy 77→5%), removing the positional embedding costs −17pp, halving heads −19pp, and cross-block weight-sharing is fatal — every component earns its keep. Trading FFN width for depth is a wash — a *style* knob, where deeper play does better against stronger opponents at the same prediction accuracy. **Conclusion: v3.1 is the architecture; there is no "v3.2."** Full table: `memory/v3.2-ablation-verdict.md`.
 
 **True minimum.** Scaling v3.1 down, the smallest net that still beats Stockfish-easiest is **d24/b8 ≈ 70.6k params** (~52% wins, confirmed over 520 games). Below it the strength cliff is steep and **width-bound** (d20→37%, d16→19%, d12→11%); depth can't rescue narrow width. Checkpoint: `model/v3/truemin/T1-d24b8/`.
 
@@ -218,7 +218,7 @@ A public, static, **educational** browser app (React + Vite + TypeScript) that r
 - **play** it — one-shot inference per move, with a value-head readout and an optional top-5 move picker, and
 - **inspect** it — a "Model Inspector" telescope from the architecture diagram down to individual attention weights tied to the 64 board squares, with contextual explanations.
 
-It is **architecture-version-neutral**: it never reads a `.pt`, only a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` graph + `weights.bin` + `config.json`), so it renders whatever architecture the capsule declares. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
+It is **architecture-version-neutral**: instead of a `.pt` it loads a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` graph + `weights.bin` + `config.json`), so it renders whatever architecture the capsule declares. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
 
 ## Roadmap — next big model
 
@@ -594,7 +594,7 @@ PUCT search on top of a v2 model, swept for the strongest settings (full sweep i
 - **Best in-budget config: 50 sims @ c_puct 1.5** (≈170 ms/move on `v2-37M`, within Stockfish-ultra's per-move time). c_puct is an inverted-U with a clean peak at 1.5; the search benefit floors in around 15 sims and saturates by ~50.
 - **On `v2-37M`, MCTS-50 sweeps sf_easy/med/hard at 100%** and cracks sf_magnus (d8) to ~37% wins **within budget** — where `v2-19M` at 50 sims scored 0% and needed ~800 over-budget sims to compete.
 - **Search effectiveness scales with base-model strength:** the stronger `v2-37M` extracts far more per simulation than `v2-19M`, and is the first model to draw against sf_ultra (d16) from the search track.
-- **The d16 "ultra" tier remains a model-quality ceiling** — search amplifies the model but cannot bridge a ~1000-Elo gap. Beating it needs a stronger base model (the case for v3), not just more simulations.
+- **The d16 "ultra" tier remains a model-quality ceiling** — search amplifies the model but cannot bridge a ~1000-Elo gap. Beating it takes a stronger base model — the case for v3 — rather than more simulations.
 
 Run with `play.py --mcts` or sweep with `eval/v2/mcts_sweep.py`. MCTS uses only the model's own policy `P` and value `V` (Principle 3 carve-out — no injected chess heuristics).
 
