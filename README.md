@@ -1,5 +1,7 @@
 # neural-chess
 
+> 🎮 **[Play the model & explore it live in your browser → pbaer.github.io/neural-chess](https://pbaer.github.io/neural-chess/)** — the *Neural Chess* web tool: play the tiny v3.1 model with one-shot inference, and inspect every weight and activation from the architecture diagram down to a single scalar.
+
 A chess engine trained on a large corpus of human games. **Three architecture generations live in this repo:**
 
 - **v1** — 12-plane input, 10×256 residual CNN, ~12M params, trained on 22M positions from ~800k historical games. Policy head only. [Architecture details below](#v1-architecture-original).
@@ -208,7 +210,7 @@ A line of tiny "teaching" models (small enough that **every weight/activation is
 
 ### Fast in-RAM trainer (tau recipe, bit-packed)
 
-`src/v3/pack_agg.py` + `src/v3/train_agg_fast.py` are a **~13–25× faster** path for the tau recipe. 20 of the 21 input planes are binary after int8 truncation, so the 97 GB `agg_100M` memmap bit-packs to **16 GB** (`data/v2/agg_100M_packed/`, round-trip bit-exact), loads fully into RAM, and the GPU bit-unpacks each batch — eliminating the disk-I/O bottleneck that capped `train_agg.py` at ~2k samp/s. Exposes the v3.1/v3.2 knobs `--stem-kernel --stem-blocks --ffn-mult --value-hidden --no-geometry-bias --no-pos-emb --share-blocks`. Used for every teaching model; the recommended trainer for the next big model.
+`src/v3/pack_agg.py` + `src/v3/train_agg_fast.py` are a **~13–25× faster** path for the tau recipe. 20 of the 21 input planes are binary after int8 truncation, so the ~92 GB `agg_100M` corpus bit-packs to a RAM-resident **~26 GB** form (`data/v2/agg_100M_packed/`, round-trip bit-exact) that loads fully into memory, and the GPU bit-unpacks each batch — eliminating the disk-I/O bottleneck that capped `train_agg.py` at ~2k samp/s. Exposes the v3.1/v3.2 knobs `--stem-kernel --stem-blocks --ffn-mult --value-hidden --no-geometry-bias --no-pos-emb --share-blocks`. Used for every teaching model; the recommended trainer for the next big model.
 
 ## Neural Chess web tool (`viz/`)
 
@@ -273,12 +275,12 @@ The v2 pipeline is **three sequential steps** living in `data/v2/_acquire/`. The
 |-------|------------:|
 | Raw archives (Lichess Elite + monthly + TWIC zips/zsts) | ~6 GB |
 | Filtered tier PGNs | ~1.1 GB |
-| 8M shard (smaller smoke-test) | ~2.2 GB |
-| 40M-position training shard (binary memmap) | ~10.8 GB |
-| 100M shard (trained v2-37M / v3-37M) | ~134 GB |
+| 8M shard (smaller smoke-test) | ~11 GB |
+| 40M-position training shard (binary memmap) | ~51 GB |
+| 100M shard (trained v2-37M / v3-37M) | ~126 GB |
 | Position-aggregated "tau" corpus (`agg_100M`, 72M unique) | ~92 GB |
 
-Reserve **~25 GB** for a small (≤40M) reconstruction; the full 100M shard and the tau corpus need **~230 GB** between them.
+Reserve **~20 GB** for an 8M smoke-test reconstruction (~60 GB through the 40M shard); the full 100M shard and the tau corpus need **~220 GB** between them.
 
 #### Step 1 — Download raw sources
 
@@ -331,7 +333,7 @@ python -m src.v2.dataset --out-dir data/v2/training_T1_rot --positions 8000000
 # 40M shard (trained v2-19M; ~25 min to generate)
 python -m src.v2.dataset --out-dir data/v2/training_T1_rot_40M --positions 40000000
 
-# 100M shard (trained the current-best v2-37M; ~95 min, ~134 GB on disk)
+# 100M shard (trained the current-best v2-37M; ~95 min, ~126 GB on disk)
 python -m src.v2.dataset --out-dir data/v2/training_T1_rot_100M --positions 100000000
 ```
 
@@ -393,7 +395,7 @@ Notes:
 - `--epochs` is the **cosine LR horizon** (anneals LR to 0 at that epoch). Training continues until `--max-epochs` (or a `.stop` file appears in the project root). Set them equal to run the full cosine.
 - Auto-resumes from the latest checkpoint in `--save-dir`. Pass `--no-resume` to start fresh.
 - **Mixed precision is BF16** (bfloat16 — a 16-bit float with the same exponent range as 32-bit, so it can't overflow; auto-detected, falls back to FP16 only if unsupported). BF16 is required for deep towers — FP16 overflows and silently NaNs BatchNorm buffers on ≥16-block models. Gradient clipping (caps the gradient size each step at norm 1.0) is always on.
-- **`--num-workers 8`** is strongly recommended for large shards that exceed RAM page-cache (the 100M shard is 134 GB on disk) — it gives ~7× faster data loading. Works on Windows thanks to the memmap pickle fix in `ChessDatasetV2`.
+- **`--num-workers 8`** is strongly recommended for large shards that exceed RAM page-cache (the 100M shard is 126 GB on disk) — it gives ~7× faster data loading. Works on Windows thanks to the memmap pickle fix in `ChessDatasetV2`.
 - ~8 h/epoch on a 4080 Super for the 100M / 20×320 config.
 - Checkpoints are dicts `{model, optimizer, scheduler, epoch, arch, config}` — resume restores full training state.
 
@@ -626,7 +628,7 @@ neural-chess/
 │       ├── filtered/        # tier_top/mid/low.pgn after filter step
 │       ├── training_T1_rot*/        # featurized shards (8M / 40M / 100M) for v2/v3
 │       ├── agg_100M/        # position-aggregated "tau" corpus (avg value + move histogram + count)
-│       └── agg_100M_packed/ # bit-packed RAM-resident "tau" corpus (16 GB) for train_agg_fast.py
+│       └── agg_100M_packed/ # bit-packed RAM-resident "tau" corpus (~25 GB; ~26 GB resident) for train_agg_fast.py
 ├── model/                   # gitignored — checkpoints per version
 │   ├── v1/checkpoints/
 │   ├── v2/v2-{2..37}M*/     # the v2 CNN scale ladder; v2-37M (20×320, 100M data) is best v2
@@ -655,7 +657,7 @@ neural-chess/
 │       ├── model.py / inference.py     # attention tower (+ v3.1/v3.2 toggles) + V3PolicyEngine
 │       ├── aggregate.py     # build the position-aggregated "tau" corpus
 │       ├── train_agg.py     # train on the tau corpus (avg value + soft policy + count^τ)
-│       ├── pack_agg.py      # bit-pack agg_100M → agg_100M_packed (97 GB → 16 GB, RAM-resident)
+│       ├── pack_agg.py      # bit-pack agg_100M → agg_100M_packed (~92 GB → ~26 GB, RAM-resident)
 │       └── train_agg_fast.py  # fast in-RAM bit-packed tau trainer (~13–25×; v3.1/v3.2 flags)
 ├── eval/
 │   ├── v1/                  # evaluate.py, eval_one.py, opening/castling/temp analyses
