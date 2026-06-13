@@ -10,7 +10,7 @@ A chess engine trained on a large corpus of human games. **Three architecture ge
 
 A separate, validated win is the **"tau" data recipe** — a position-aggregated corpus (averaged value + soft-policy move histogram + frequency-tempered sampling) that adds ~+79 Elo at equal params; **`v3-18M-tau` ≈ `v3-37M` at half the parameters**. [Details below](#the-tau-data-recipe-position-aggregated). Naming: `v3-<paramsize>-tau`.
 
-- **v3.1 — a leaner architecture (no conv stem).** Teaching-model work showed the v3 conv stem is droppable: a **pure square-token transformer** (`stem_kernel=1, stem_blocks=0`) is *smaller and stronger* at small scale, and a full ablation pass ("v3.2") confirmed the result is tight — every remaining component is load-bearing. **v3.1 is the validated lean architecture** and the recommended shape for the next big model (`v3.1-37M-tau`). [Details below](#v31--the-lean-no-conv-architecture-teaching-models--true-minimum).
+- **v3.1 — a leaner architecture (no conv stem).** Teaching-model work showed the v3 conv stem is droppable: a **pure square-token transformer** (`stem_kernel=1, stem_blocks=0`) is *smaller and stronger* at small scale, and a full ablation pass ("v3.2") confirmed the result is tight — every remaining component is needed. **v3.1 is the validated lean architecture** and the recommended shape for the next big model (`v3.1-37M-tau`). [Details below](#v31--the-lean-no-conv-architecture-teaching-models--true-minimum).
 - **Neural Chess web tool (`viz/`).** A browser app that runs a hand-written TypeScript forward pass of the tiny v3.1 hero and lets you **play** it *and* **inspect** every weight/activation from the architecture diagram down to a single scalar. [Details below](#neural-chess-web-tool-viz) · [viz/README.md](viz/README.md).
 
 All three generations share the same `PolicyEngine` runtime interface so a single `play.py` / `uci.py` works for any; the architecture is auto-detected from the checkpoint.
@@ -23,7 +23,7 @@ Model directories are named `v{N}-{params_M}M[-{tag}]` where `{params_M}` is the
 
 ## Project principles
 
-Three load-bearing rules govern every design decision:
+Three core rules govern every design decision:
 
 1. **Human games only.** Training data must come from human-played games. No engine games, no self-play, no engine-annotated labels, no pretrained engine weights.
 2. **Pen-and-paper signal only.** Supervision targets are limited to what's observable in the games (positions, moves played, outcomes). No computed chess features (material counts, pawn-structure heuristics, king-safety scores, mobility, etc.) — the model must learn what matters from raw observation.
