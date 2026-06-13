@@ -35,11 +35,13 @@ These rules keep the experiment honest: how strong a chess engine can we build f
 
 v3 keeps v2's **input (21 planes, rotation) and output (4,672 move encoding) unchanged** — only the inner tower changes from a CNN to self-attention over the 64 squares. The thesis: a CNN builds long-range board understanding only by stacking many conv layers, whereas self-attention lets any square influence any other in one layer.
 
+**The current, validated form is "v3.1": a pure square-token transformer with _no_ conv stem.** Later ablations showed the conv stem is dead weight — the model is *smaller and stronger* without it. The first v3 big models (`v3-18M`/`v3-37M`) were trained with a small conv stem *before* that finding; the diagram below shows the current no-conv form, and the [v3.1 section](#v31--the-lean-no-conv-architecture-teaching-models--true-minimum) has the evidence.
+
 ```
 Input (21, 8, 8)
      │
      ▼
-Conv stem: Conv 21→C, 3×3 + BN + ReLU, then `stem_blocks` (2) conv residual blocks
+Per-square embed: 21 planes → C, 1×1 per square   (v3.1 — no conv stem)
      │
      ▼
 Tokenize (B,C,8,8) → (B,64,C)  +  learned positional embedding   (token = square index)
@@ -65,7 +67,7 @@ Policy head:                Value head:
 
 Config-driven via `ChessConfigV3` (`src/v3/model.py`); knobs `--d-model / --n-heads / --n-blocks / --ffn-mult / --stem-blocks / --no-geometry-bias / --checkpoint-every` in `src/v2/train.py` (with `--arch v3`). Training signal, losses, and the rotation trick are identical to v2.
 
-> **The conv stem is optional — and best dropped.** Setting `stem_kernel=1, stem_blocks=0` removes it for a **pure square-token transformer ("v3.1")**, which is *smaller and stronger* at the scales tested and is the validated lean architecture (see [v3.1 — the lean (no-conv) architecture](#v31--the-lean-no-conv-architecture-teaching-models--true-minimum)). The big v3 models in the table above predate this finding and still include the stem; the teaching/hero models and the planned next big model drop it.
+> **The diagram above shows the current no-conv form (v3.1).** The conv stem is the *legacy* path — enabled by `stem_kernel=3, stem_blocks=2` and used only by the first big models (`v3-18M`/`v3-37M`) in the table above, which predate the ablation. Setting `stem_kernel=1, stem_blocks=0` (the default for the teaching/hero models and the next big model) gives the pure square-token transformer, which is *smaller and stronger* — attention + the relative geometry bias already cover locality. Evidence: [v3.1 — the lean (no-conv) architecture](#v31--the-lean-no-conv-architecture-teaching-models--true-minimum).
 
 ## v2 architecture (prior generation)
 
