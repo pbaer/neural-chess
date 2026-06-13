@@ -1,6 +1,6 @@
 # neural-chess
 
-> 🎮 **[Play the model & explore it live in your browser → pbaer.github.io/neural-chess](https://pbaer.github.io/neural-chess/)** — the *Neural Chess* web tool: play the tiny v3.1 model with one-shot inference, and inspect every weight and activation from the architecture diagram down to a single scalar.
+> **Play the model!** [pbaer.github.io/neural-chess](https://pbaer.github.io/neural-chess/) — the tiny v3.1 model running entirely in the browser, with one-shot inference and an interactive visualization of every model parameter and activation.
 
 A chess engine trained on a large corpus of human games. **Three architecture generations live in this repo:**
 
