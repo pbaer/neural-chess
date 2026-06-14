@@ -679,7 +679,8 @@ neural-chess/
 
 ## Provenance and license
 
-- **Code**: see repo license.
+- **Code**: [MIT](LICENSE) © Peter Baer — permissive; reuse freely **with attribution** (keep the copyright + license notice).
+- **Chess piece graphics** (web tool): the *cburnett* set by Colin M.L. Burnett, used under BSD — see `viz/THIRD_PARTY.md`.
 - **v1 training data**: derived from open historical PGNs (TWIC + Lichess) — derived NPZ shards may be redistributed.
 - **v2 training data**: mixed sources. Lichess content is CC0; **TWIC content is "personal use only" and the filtered tier PGNs / shards derived from it must NOT be redistributed wholesale.** Trained weights derived from this mix are personal-use only.
 - **No engine-derived training signal** (Stockfish evaluations, MCTS rollouts, etc.) is used anywhere in either version, per the project principles.
