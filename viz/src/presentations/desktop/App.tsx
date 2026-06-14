@@ -62,7 +62,9 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
   // Which MCTS root move (by uci) the user is hovering in the stats table — used
   // to accent the matching visit-weighted arrow on the board.
   const [searchHoverUci, setSearchHoverUci] = useState<string | null>(null);
-  const showSearchArrows = thinking && state.mcts.enabled;
+  // Hide the live visit-weighted search arrows during the post-search flash beat
+  // so only the chosen-move highlight (gold/red, like a hovered pick) shows.
+  const showSearchArrows = thinking && state.mcts.enabled && !state.flashMove;
   const modelColor: typeof state.humanColor = state.humanColor === 'w' ? 'b' : 'w';
 
   const statusLine = (() => {

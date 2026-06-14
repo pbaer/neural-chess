@@ -75,8 +75,14 @@ export function Board({ store, state, disabled, hoverUci, searchChildren, search
     return orientation === 'w' ? { r: 7 - rank, c: file } : { r: rank, c: 7 - file };
   };
 
-  const candidates = state.status === 'choosing' ? state.candidates : null;
-  const hoverCand = candidates && hoverUci ? candidates.find((c) => c.uci === hoverUci) ?? null : null;
+  // Pick-mode candidates drive the picker arrows + hover accent. When MCTS has
+  // just chosen a move it publishes `flashMove`; we reuse the EXACT same arrow +
+  // square-tint highlight by treating it as a one-element candidate list that is
+  // "hovered" — so the chosen move flashes identically before it's played.
+  const pickCandidates = state.status === 'choosing' ? state.candidates : null;
+  const candidates = pickCandidates ?? (state.flashMove ? [state.flashMove] : null);
+  const activeHoverUci = state.flashMove ? state.flashMove.uci : hoverUci;
+  const hoverCand = candidates && activeHoverUci ? candidates.find((c) => c.uci === activeHoverUci) ?? null : null;
 
   const kingInCheck = useMemo(() => {
     if (!state.inCheck) return -1;
@@ -208,11 +214,11 @@ export function Board({ store, state, disabled, hoverUci, searchChildren, search
             {candidates
               .slice()
               // draw the hovered arrow last so it sits on top of the others
-              .sort((a, b) => Number(a.uci === hoverUci) - Number(b.uci === hoverUci))
+              .sort((a, b) => Number(a.uci === activeHoverUci) - Number(b.uci === activeHoverUci))
               .map((cand) => {
               const top = candidates[0].prob || 1;
               const rel = cand.prob / top; // 1 = best move, smaller = less likely
-              const hovered = cand.uci === hoverUci;
+              const hovered = cand.uci === activeHoverUci;
               const from = idxToCell(cand.fromIdx);
               const to = idxToCell(cand.toIdx);
               const x1c = from.c + 0.5;

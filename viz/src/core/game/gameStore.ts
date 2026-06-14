@@ -70,6 +70,13 @@ export const DEFAULT_TEMPERATURE = 0.6;
  */
 export const MCTS_DEFAULTS = { enabled: false, sims: 320, timeMs: 1500, cPuct: 1.5, temperature: 0 } as const;
 
+/**
+ * How long (ms) to flash the move MCTS just chose — using the same gold/red
+ * highlight the pick-mode picker shows on hover — before it lands on the board.
+ * A short "here's the move I chose" beat after the search finishes.
+ */
+export const MCTS_FLASH_MS = 500;
+
 /** Live-adjustable MCTS settings. */
 export interface MctsSettings {
   enabled: boolean;
@@ -128,6 +135,12 @@ export interface GameState {
   temperature: number;
   /** Ranked top-K legal moves awaiting a pick (only set while status==='choosing'). */
   candidates: ModelCandidate[] | null;
+  /**
+   * The move MCTS just chose, briefly published BEFORE it's applied so the board
+   * can flash it with the same highlight as a hovered pick-mode candidate. Null
+   * except during that ~MCTS_FLASH_MS beat.
+   */
+  flashMove: ModelCandidate | null;
   /** MCTS ("think harder") settings — see MctsSettings. */
   mcts: MctsSettings;
   /** Live (while thinking) or last-completed MCTS search snapshot, or null. */
@@ -220,13 +233,13 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         policyProb: prob,
       };
       candidates = null;
-      commit({ lastModelMove: info });
+      commit({ lastModelMove: info, flashMove: null });
     }
 
     async function runModel(): Promise<void> {
       const token = ++thinkToken;
       candidates = null;
-      set({ status: 'thinking', candidates: null, search: null });
+      set({ status: 'thinking', candidates: null, search: null, flashMove: null });
 
       // MCTS ("think harder") path: search off the main thread, visualize live,
       // then play the most-visited root move. Uses ONLY the model's P/V.
@@ -257,8 +270,25 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
           commit({ error: 'Search produced no legal move.' });
           return;
         }
+        // Flash the chosen move with the pick-mode hover highlight for a brief
+        // beat, then play it — a consistent "here's the move I chose" moment.
+        const mv = result.move;
+        set({
+          flashMove: {
+            from: mv.from,
+            to: mv.to,
+            promotion: mv.promotion,
+            fromIdx: mv.fromIdx,
+            toIdx: mv.toIdx,
+            uci: mv.uci,
+            san: mv.san,
+            prob: result.prior,
+          },
+        });
+        await new Promise((r) => setTimeout(r, MCTS_FLASH_MS));
+        if (token !== thinkToken) return; // superseded during the flash beat
         applyModelMove(
-          { from: result.move.from, to: result.move.to, promotion: result.move.promotion },
+          { from: mv.from, to: mv.to, promotion: mv.promotion },
           result.value,
           result.prior,
         );
@@ -328,7 +358,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       lastMove = null;
       candidates = null;
       recordPosition();
-      commit({ humanColor, lastModelMove: null, search: null });
+      commit({ humanColor, lastModelMove: null, search: null, flashMove: null });
       if (!chess.isGameOver() && chess.turn() !== humanColor) void runModel();
     }
 
@@ -348,6 +378,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       pickMode: false,
       temperature: DEFAULT_TEMPERATURE,
       candidates: null,
+      flashMove: null,
       mcts: { ...MCTS_DEFAULTS },
       search: null,
       error: null,
@@ -435,7 +466,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         epSquare = last ? epTargetAfterMove(last) : null;
         lastMove = last ? { fromIdx: algToIdx(last.from), toIdx: algToIdx(last.to) } : null;
         candidates = null;
-        commit({ lastModelMove: null, search: null });
+        commit({ lastModelMove: null, search: null, flashMove: null });
       },
 
       legalTargets(fromIdx) {
