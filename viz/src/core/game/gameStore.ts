@@ -154,9 +154,11 @@ export interface GameState {
    */
   suggestions: ModelCandidate[] | null;
   /**
-   * The move MCTS just chose, briefly published BEFORE it's applied so the board
-   * can flash it with the same highlight as a hovered pick-mode candidate. Null
-   * except during that ~MCTS_FLASH_MS beat.
+   * The move about to land, briefly published BEFORE it's applied so the board can
+   * flash it with the same gold/red highlight as a hovered pick-mode candidate.
+   * Used by EVERY move — the model's (MCTS / auto-play pick) AND the human's (board
+   * click or assist-suggestion click) — so every move shows the same brief "here's
+   * the move I'm about to make" beat. Null except during that ~MCTS_FLASH_MS beat.
    */
   flashMove: ModelCandidate | null;
   /**
@@ -315,6 +317,51 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       refreshSuggestions();
     }
 
+    /**
+     * Drive an already-validated HUMAN move through the SAME flash beat the model
+     * uses: briefly publish it as `flashMove` (gold/red highlight) for ~MCTS_FLASH_MS,
+     * THEN apply it to chess.js — so human and model moves land identically. The move
+     * is NOT applied to chess.js yet at call time (the caller trial-applied + undid it
+     * only to validate / read its SAN), so the board still shows the pre-move position
+     * with the flash arrow overlaid. Token-guarded exactly like the model path: a New
+     * Game / Load FEN bumps `thinkToken` and the post-beat check drops the apply; the
+     * `status: 'thinking'` set here disables the board and blocks a second human move
+     * (and blocks undo) for the duration of the beat — no stale or double move.
+     */
+    async function flashThenApplyHumanMove(
+      mv: { from: string; to: string; promotion?: PromotionPiece },
+      san: string,
+    ): Promise<void> {
+      const token = ++thinkToken;
+      suggestToken++; // the human committed → drop their suggestions
+      set({
+        status: 'thinking',
+        suggestions: null,
+        search: null,
+        previewMoves: null,
+        flashMove: {
+          from: mv.from,
+          to: mv.to,
+          promotion: mv.promotion,
+          fromIdx: algToIdx(mv.from),
+          toIdx: algToIdx(mv.to),
+          uci: mv.from + mv.to + (mv.promotion ?? ''),
+          san,
+          prob: 1, // single highlighted move → full-strength arrow
+        },
+      });
+      await new Promise((r) => setTimeout(r, MCTS_FLASH_MS));
+      if (token !== thinkToken) return; // superseded (new game / load fen) during the beat
+      // Apply for real now (re-applies the move the caller trial-validated + undid).
+      const applied = chess.move({ from: mv.from, to: mv.to, promotion: mv.promotion ?? 'q' });
+      epSquare = epTargetAfterMove(applied);
+      lastMove = { fromIdx: algToIdx(mv.from), toIdx: algToIdx(mv.to) };
+      recordPosition();
+      commit({ suggestions: null, flashMove: null });
+      if (!chess.isGameOver() && chess.turn() !== get().humanColor) void runModel();
+      else refreshSuggestions();
+    }
+
     async function runModel(): Promise<void> {
       const token = ++thinkToken;
       // Model's turn → drop any human-turn suggestions.
@@ -471,20 +518,26 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
 
       humanMove(fromIdx, toIdx, promotion) {
         const s = get();
+        // Re-entry guard: `status: 'thinking'` (set by the flash beat below or by the
+        // model) blocks starting a second move mid-flash. 'over' blocks moves too.
         if (s.status === 'thinking' || s.status === 'over') return false;
         if (chess.turn() !== s.humanColor) return false;
-        let applied: ChessMove;
+        // Validate by trial-applying, then immediately undo — we re-apply after the
+        // flash beat. This keeps chess.js legality/SAN/promotion semantics identical
+        // to a direct chess.move while leaving the board on the pre-move position so
+        // the flash arrow overlays it (the move hasn't "landed" yet).
+        let trial: ChessMove;
         try {
-          applied = chess.move({ from: idxToAlg(fromIdx), to: idxToAlg(toIdx), promotion: promotion ?? 'q' });
+          trial = chess.move({ from: idxToAlg(fromIdx), to: idxToAlg(toIdx), promotion: promotion ?? 'q' });
         } catch {
           return false; // illegal
         }
-        epSquare = epTargetAfterMove(applied);
-        lastMove = { fromIdx, toIdx };
-        suggestToken++; // the human moved → drop their suggestions
-        recordPosition();
-        commit({ suggestions: null });
-        if (!chess.isGameOver() && chess.turn() !== s.humanColor) void runModel();
+        chess.undo(); // revert — only needed it to validate & read san/promotion
+        // Drive it through the SAME flash beat the model uses, then apply.
+        void flashThenApplyHumanMove(
+          { from: trial.from, to: trial.to, promotion: trial.promotion as PromotionPiece | undefined },
+          trial.san,
+        );
         return true;
       },
 

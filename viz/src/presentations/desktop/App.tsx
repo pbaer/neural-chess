@@ -104,6 +104,9 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
     if (!ready) return 'Loading model…';
     if (state.error) return state.error;
     if (state.status === 'over') return state.resultText ?? 'Game over';
+    // During the human move-flash beat the move hasn't landed, so it's still the
+    // human's turn (the model's flash keeps turn === modelColor). Don't mislabel it.
+    if (thinking && state.flashMove && state.turn === state.humanColor) return 'Playing your move…';
     if (thinking) return 'Model is thinking…';
     if (state.turn === state.humanColor) return `Your move (${state.humanColor === 'w' ? 'White' : 'Black'})`;
     return 'Model to move';
