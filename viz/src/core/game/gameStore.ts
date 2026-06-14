@@ -77,6 +77,15 @@ export const MCTS_DEFAULTS = { enabled: false, sims: 320, timeMs: 1500, cPuct: 1
  */
 export const MCTS_FLASH_MS = 500;
 
+/**
+ * How long (ms) the non-MCTS auto-play path surfaces the model's TOP policy moves
+ * as prob-weighted arrows before flashing+playing the chosen one. Presents a single
+ * forward pass like "MCTS with essentially one simulation": show the move
+ * distribution → flash the pick → play. Roughly matches MCTS_FLASH_MS so the two
+ * paths feel consistent.
+ */
+export const AUTOPLAY_PREVIEW_MS = 500;
+
 /** Live-adjustable MCTS settings. */
 export interface MctsSettings {
   enabled: boolean;
@@ -141,6 +150,12 @@ export interface GameState {
    * except during that ~MCTS_FLASH_MS beat.
    */
   flashMove: ModelCandidate | null;
+  /**
+   * Top policy moves briefly surfaced (prob-weighted arrows) right before a
+   * non-MCTS auto-play move lands — the "show the move distribution" beat that
+   * mirrors MCTS's live arrows. Null except during that ~AUTOPLAY_PREVIEW_MS beat.
+   */
+  previewMoves: ModelCandidate[] | null;
   /** MCTS ("think harder") settings — see MctsSettings. */
   mcts: MctsSettings;
   /** Live (while thinking) or last-completed MCTS search snapshot, or null. */
@@ -233,13 +248,13 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         policyProb: prob,
       };
       candidates = null;
-      commit({ lastModelMove: info, flashMove: null });
+      commit({ lastModelMove: info, flashMove: null, previewMoves: null });
     }
 
     async function runModel(): Promise<void> {
       const token = ++thinkToken;
       candidates = null;
-      set({ status: 'thinking', candidates: null, search: null, flashMove: null });
+      set({ status: 'thinking', candidates: null, search: null, flashMove: null, previewMoves: null });
 
       // MCTS ("think harder") path: search off the main thread, visualize live,
       // then play the most-visited root move. Uses ONLY the model's P/V.
@@ -342,6 +357,50 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         commit({ error: 'Model produced no legal move.' });
         return;
       }
+
+      // Present the single forward pass like "MCTS with one simulation":
+      //   1) surface the top-K policy moves as prob-weighted arrows (the move
+      //      distribution), 2) flash the selected move with the pick-mode
+      //      gold/red highlight, then 3) play it. Each beat is token-guarded so a
+      //      New Game / Load FEN / undo during it cancels cleanly.
+      const ranked: ModelCandidate[] = [];
+      for (const [idx, m] of indexToMove) {
+        ranked.push({
+          from: m.from,
+          to: m.to,
+          promotion: m.promotion as PromotionPiece | undefined,
+          fromIdx: algToIdx(m.from),
+          toIdx: algToIdx(m.to),
+          uci: m.from + m.to + (m.promotion ?? ''),
+          san: m.san,
+          prob: reply.policyProbs[idx] ?? 0,
+        });
+      }
+      ranked.sort((a, b) => b.prob - a.prob);
+
+      // 1) Show the top moves' distribution.
+      set({ previewMoves: ranked.slice(0, TOP_K_CANDIDATES) });
+      await new Promise((r) => setTimeout(r, AUTOPLAY_PREVIEW_MS));
+      if (token !== thinkToken) return; // superseded during the preview beat
+
+      // 2) Flash the chosen move (reuses the pick-mode hover highlight).
+      set({
+        previewMoves: null,
+        flashMove: {
+          from: mv.from,
+          to: mv.to,
+          promotion: mv.promotion as PromotionPiece | undefined,
+          fromIdx: algToIdx(mv.from),
+          toIdx: algToIdx(mv.to),
+          uci: mv.from + mv.to + (mv.promotion ?? ''),
+          san: mv.san,
+          prob: reply.policyProbs[chosen] ?? 0,
+        },
+      });
+      await new Promise((r) => setTimeout(r, MCTS_FLASH_MS));
+      if (token !== thinkToken) return; // superseded during the flash beat
+
+      // 3) Play it.
       applyModelMove(
         { from: mv.from, to: mv.to, promotion: mv.promotion as PromotionPiece | undefined },
         reply.value,
@@ -358,7 +417,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       lastMove = null;
       candidates = null;
       recordPosition();
-      commit({ humanColor, lastModelMove: null, search: null, flashMove: null });
+      commit({ humanColor, lastModelMove: null, search: null, flashMove: null, previewMoves: null });
       if (!chess.isGameOver() && chess.turn() !== humanColor) void runModel();
     }
 
@@ -379,6 +438,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       temperature: DEFAULT_TEMPERATURE,
       candidates: null,
       flashMove: null,
+      previewMoves: null,
       mcts: { ...MCTS_DEFAULTS },
       search: null,
       error: null,
@@ -466,7 +526,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         epSquare = last ? epTargetAfterMove(last) : null;
         lastMove = last ? { fromIdx: algToIdx(last.from), toIdx: algToIdx(last.to) } : null;
         candidates = null;
-        commit({ lastModelMove: null, search: null, flashMove: null });
+        commit({ lastModelMove: null, search: null, flashMove: null, previewMoves: null });
       },
 
       legalTargets(fromIdx) {

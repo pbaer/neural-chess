@@ -75,12 +75,15 @@ export function Board({ store, state, disabled, hoverUci, searchChildren, search
     return orientation === 'w' ? { r: 7 - rank, c: file } : { r: rank, c: 7 - file };
   };
 
-  // Pick-mode candidates drive the picker arrows + hover accent. When MCTS has
-  // just chosen a move it publishes `flashMove`; we reuse the EXACT same arrow +
-  // square-tint highlight by treating it as a one-element candidate list that is
-  // "hovered" — so the chosen move flashes identically before it's played.
+  // Pick-mode candidates drive the picker arrows + hover accent. When MCTS (or
+  // non-MCTS auto-play) has just chosen a move it publishes `flashMove`; we reuse
+  // the EXACT same arrow + square-tint highlight by treating it as a one-element
+  // candidate list that is "hovered" — so the chosen move flashes identically
+  // before it's played. And non-MCTS auto-play first publishes `previewMoves` (its
+  // top policy moves), rendered through the same prob-weighted candidate arrows so
+  // the move distribution shows for a beat before the flash.
   const pickCandidates = state.status === 'choosing' ? state.candidates : null;
-  const candidates = pickCandidates ?? (state.flashMove ? [state.flashMove] : null);
+  const candidates = pickCandidates ?? (state.flashMove ? [state.flashMove] : state.previewMoves);
   const activeHoverUci = state.flashMove ? state.flashMove.uci : hoverUci;
   const hoverCand = candidates && activeHoverUci ? candidates.find((c) => c.uci === activeHoverUci) ?? null : null;
 
