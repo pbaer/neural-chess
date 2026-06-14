@@ -14,8 +14,15 @@ export interface GameControlsProps {
 export function GameControls({ store, state, disabled }: GameControlsProps) {
   const [fen, setFen] = useState('');
   const [fenError, setFenError] = useState<string | null>(null);
+  // FEN-setup mode: the "Paste FEN" row is only revealed once the user clicks the
+  // FEN button. Starting a fresh game (White/Black) collapses it again.
+  const [fenMode, setFenMode] = useState(false);
 
-  const start = (color: Color) => store.getState().newGame(color);
+  const start = (color: Color) => {
+    setFenMode(false);
+    setFenError(null);
+    store.getState().newGame(color);
+  };
 
   return (
     <div className="controls">
@@ -35,42 +42,51 @@ export function GameControls({ store, state, disabled }: GameControlsProps) {
         >
           Black
         </button>
-        <button className="btn" onClick={() => store.getState().undo()} disabled={disabled}>
-          Undo
+        <button
+          className={'btn' + (fenMode ? ' btn-active' : '')}
+          onClick={() => setFenMode((on) => !on)}
+          disabled={disabled}
+        >
+          FEN
         </button>
       </div>
 
-      <label className="control-row pick-toggle">
+      <label className="control-row pick-toggle assist-toggle">
         <input
           type="checkbox"
           checked={state.assist}
           onChange={(e) => store.getState().setAssist(e.target.checked)}
           disabled={disabled}
         />
-        <span className="control-label">Show move suggestions — the model hints its top moves for your side</span>
+        <span className="control-label">Show model hints of its top moves for you</span>
       </label>
 
-      <div className="control-row">
-        <input
-          className="fen-input"
-          placeholder="Paste FEN to set up a position…"
-          value={fen}
-          onChange={(e) => setFen(e.target.value)}
-          spellCheck={false}
-        />
-        <button
-          className="btn"
-          disabled={disabled || !fen.trim()}
-          onClick={() => {
-            const ok = store.getState().loadFen(fen.trim());
-            setFenError(ok ? null : (store.getState().error ?? 'Invalid FEN'));
-            if (ok) setFen('');
-          }}
-        >
-          Load
-        </button>
-      </div>
-      {fenError && <div className="error-text">{fenError}</div>}
+      {fenMode && (
+        <div className="control-row">
+          <input
+            className="fen-input"
+            placeholder="Paste FEN to set up a position…"
+            value={fen}
+            onChange={(e) => setFen(e.target.value)}
+            spellCheck={false}
+          />
+          <button
+            className="btn"
+            disabled={disabled || !fen.trim()}
+            onClick={() => {
+              const ok = store.getState().loadFen(fen.trim());
+              setFenError(ok ? null : (store.getState().error ?? 'Invalid FEN'));
+              if (ok) {
+                setFen('');
+                setFenMode(false);
+              }
+            }}
+          >
+            Load
+          </button>
+        </div>
+      )}
+      {fenMode && fenError && <div className="error-text">{fenError}</div>}
     </div>
   );
 }

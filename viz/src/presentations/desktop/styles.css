@@ -139,6 +139,20 @@ body {
   border-radius: 6px;
   padding: 10px 14px;
   min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.status-text {
+  min-width: 0;
+}
+
+/* Compact Undo sitting at the right edge of the "Your move" status row. */
+.btn-undo {
+  flex: none;
+  padding: 4px 12px;
 }
 
 .status-check {
@@ -423,6 +437,21 @@ body {
 .pick-toggle input {
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+/* Move-assistant toggle: keep the checkbox pinned beside its (short) label so the
+   row reads cleanly and never wraps the box away from the text on narrow widths. */
+.assist-toggle {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.assist-toggle input {
+  flex: none;
+}
+
+.assist-toggle .control-label {
+  line-height: 1.35;
 }
 
 /* ---- move-temperature slider ---- */

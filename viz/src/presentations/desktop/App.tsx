@@ -23,7 +23,7 @@ export function App() {
         <div className="app-header-text">
           <h1>Neural Chess</h1>
           <p className="subtitle">
-            Play a tiny square-token chess transformer — every move is one in-browser forward pass.
+            Play a tiny chess model in your browser
           </p>
         </div>
         <ThemeToggle />
@@ -84,6 +84,12 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
   // Move-assistant suggestions show only on the human's turn (assist on).
   const showSuggestions = state.turn === state.humanColor && !!state.suggestions;
 
+  // Undo lives beside the "Your move" status — only while it's actually the
+  // human's turn to move (not while the model is thinking / flashing a move /
+  // the game is over) and there's a move pair to take back.
+  const showUndo =
+    ready && !thinking && state.status !== 'over' && state.turn === state.humanColor && state.sanHistory.length > 0;
+
   // Which suggested move (by uci) the user is hovering in the list — used to
   // accent the matching arrow on the board. Cleared when no suggestions show.
   const [hoverUci, setHoverUci] = useState<string | null>(null);
@@ -124,8 +130,15 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
           searchHoverUci={searchHoverUci}
         />
         <div className={'status' + (state.inCheck && state.status !== 'over' ? ' status-check' : '')}>
-          {statusLine}
-          {state.inCheck && state.status !== 'over' && <span className="check-tag"> · check</span>}
+          <span className="status-text">
+            {statusLine}
+            {state.inCheck && state.status !== 'over' && <span className="check-tag"> · check</span>}
+          </span>
+          {showUndo && (
+            <button className="btn btn-undo" onClick={() => store.getState().undo()}>
+              Undo
+            </button>
+          )}
         </div>
 
         {showSuggestions && state.suggestions && (
