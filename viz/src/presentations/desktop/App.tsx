@@ -86,9 +86,15 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
 
   // Undo lives beside the "Your move" status — only while it's actually the
   // human's turn to move (not while the model is thinking / flashing a move /
-  // the game is over) and there's a move pair to take back.
+  // the game is over) and there's a completed (human-move → model-reply) pair to
+  // take back. We key off the HUMAN's own moves, not total move count: when the
+  // human plays Black the game opens with the model's move (sanHistory.length === 1
+  // but the human hasn't moved yet), so undo must stay hidden until the human has
+  // actually played at least once.
+  const len = state.sanHistory.length;
+  const humanMovesPlayed = state.humanColor === 'w' ? Math.ceil(len / 2) : Math.floor(len / 2);
   const showUndo =
-    ready && !thinking && state.status !== 'over' && state.turn === state.humanColor && state.sanHistory.length > 0;
+    ready && !thinking && state.status !== 'over' && state.turn === state.humanColor && humanMovesPlayed >= 1;
 
   // Which suggested move (by uci) the user is hovering in the list — used to
   // accent the matching arrow on the board. Cleared when no suggestions show.
