@@ -72,7 +72,7 @@ export const MCTS_DEFAULT_CUTOFF = 0.7;
  * cutoffThreshold). 50 is the project's best in-budget setting and is cheap on the
  * deployed nano model. c_puct 1.5 is the project's tuned value.
  */
-export const MCTS_DEFAULTS = { enabled: false, sims: 50, cPuct: 1.5, cutoffThreshold: MCTS_DEFAULT_CUTOFF } as const;
+export const MCTS_DEFAULTS = { enabled: false, sims: 100, cPuct: 1.5, cutoffThreshold: MCTS_DEFAULT_CUTOFF } as const;
 
 /** Max-simulation bounds for the MCTS control. */
 export const MCTS_MIN_SIMS = 10;
