@@ -12,6 +12,7 @@ import { createStore } from 'zustand/vanilla';
 import { Chess, validateFen, type Move as ChessMove, type Square } from 'chess.js';
 import { featurize, type Color } from '../engine/index.ts';
 import type { EngineClient } from './engineClient.ts';
+import type { SearchOptions, SearchSnapshot } from '../search/types.ts';
 import {
   algToIdx,
   idxToAlg,
@@ -62,6 +63,27 @@ export const TOP_K_CANDIDATES = 5;
 export const DEFAULT_TEMPERATURE = 0.6;
 
 /**
+ * Default MCTS ("think harder") settings. Tuned so a search lands within the
+ * ≤1–2s per-move budget on the deployed nano model (forward is cheap, so a few
+ * hundred sims fit). c_puct 1.5 is the project's tuned value; temperature 0 plays
+ * the most-visited (strongest) move.
+ */
+export const MCTS_DEFAULTS = { enabled: false, sims: 320, timeMs: 1500, cPuct: 1.5, temperature: 0 } as const;
+
+/** Live-adjustable MCTS settings. */
+export interface MctsSettings {
+  enabled: boolean;
+  /** Simulation budget (hard cap). */
+  sims: number;
+  /** Wall-clock budget in ms (hard cap; whichever of sims/time hits first wins). */
+  timeMs: number;
+  /** PUCT exploration constant. */
+  cPuct: number;
+  /** Root selection temperature (0 = strongest/most-visited; >0 adds variety). */
+  temperature: number;
+}
+
+/**
  * Pick a legal move index from the policy under a softmax temperature. T≈0 returns
  * the deterministic argmax (the model's top move); larger T samples more widely.
  * Operates on the RAW legal logits so the sampled distribution is the true policy.
@@ -106,6 +128,10 @@ export interface GameState {
   temperature: number;
   /** Ranked top-K legal moves awaiting a pick (only set while status==='choosing'). */
   candidates: ModelCandidate[] | null;
+  /** MCTS ("think harder") settings — see MctsSettings. */
+  mcts: MctsSettings;
+  /** Live (while thinking) or last-completed MCTS search snapshot, or null. */
+  search: SearchSnapshot | null;
   error: string | null;
 
   // --- actions ---
@@ -117,6 +143,10 @@ export interface GameState {
   setPickMode(on: boolean): void;
   /** Set the auto-play move-selection temperature (clamped ≥ 0). */
   setTemperature(t: number): void;
+  /** Toggle MCTS ("think harder"). Off = one-shot argmax (today's behavior). */
+  setMctsEnabled(on: boolean): void;
+  /** Patch MCTS settings (sims / timeMs / cPuct / temperature). */
+  setMctsSettings(patch: Partial<MctsSettings>): void;
   /** Play the i-th candidate (pick-mode). No-op unless status==='choosing'. */
   chooseModelMove(i: number): void;
   /** Legal destination indices for a piece on `fromIdx` (current side only). */
@@ -196,7 +226,45 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
     async function runModel(): Promise<void> {
       const token = ++thinkToken;
       candidates = null;
-      set({ status: 'thinking', candidates: null });
+      set({ status: 'thinking', candidates: null, search: null });
+
+      // MCTS ("think harder") path: search off the main thread, visualize live,
+      // then play the most-visited root move. Uses ONLY the model's P/V.
+      if (get().mcts.enabled && engine.search) {
+        const m = get().mcts;
+        const repCountsObj: Record<string, number> = {};
+        for (const [k, v] of repCounts) repCountsObj[k] = v;
+        const opts: SearchOptions = {
+          sims: m.sims,
+          timeMs: m.timeMs,
+          cPuct: m.cPuct,
+          temperature: m.temperature,
+          repCounts: repCountsObj,
+        };
+        let result;
+        try {
+          result = await engine.search(chess.fen(), opts, (snap) => {
+            if (token === thinkToken) set({ search: snap });
+          });
+        } catch (e) {
+          if (token !== thinkToken) return;
+          commit({ status: 'idle', error: `Search failed: ${(e as Error).message}` });
+          return;
+        }
+        if (token !== thinkToken) return; // superseded by reset/newGame/load
+        set({ search: result.snapshot });
+        if (!result.move) {
+          commit({ error: 'Search produced no legal move.' });
+          return;
+        }
+        applyModelMove(
+          { from: result.move.from, to: result.move.to, promotion: result.move.promotion },
+          result.value,
+          result.prior,
+        );
+        return;
+      }
+
       const planes = featurize(boardState(), 'float');
       const { mask, indexToMove } = buildLegalMaskAndMap(chess);
       let reply;
@@ -253,13 +321,14 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
 
     function startGame(humanColor: Color, fen?: string): void {
       thinkToken++; // cancel any in-flight reply
+      engine.cancelSearch?.(); // stop any in-flight worker search
       chess = fen ? new Chess(fen) : new Chess();
       repCounts = new Map();
       epSquare = fen ? epTargetFromFen(fen) : null;
       lastMove = null;
       candidates = null;
       recordPosition();
-      commit({ humanColor, lastModelMove: null });
+      commit({ humanColor, lastModelMove: null, search: null });
       if (!chess.isGameOver() && chess.turn() !== humanColor) void runModel();
     }
 
@@ -279,6 +348,8 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       pickMode: false,
       temperature: DEFAULT_TEMPERATURE,
       candidates: null,
+      mcts: { ...MCTS_DEFAULTS },
+      search: null,
       error: null,
 
       humanMove(fromIdx, toIdx, promotion) {
@@ -311,6 +382,21 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
 
       setTemperature(t) {
         set({ temperature: Math.max(0, Number.isFinite(t) ? t : 0) });
+      },
+
+      setMctsEnabled(on) {
+        set({ mcts: { ...get().mcts, enabled: on } });
+      },
+
+      setMctsSettings(patch) {
+        const cur = get().mcts;
+        const next: MctsSettings = { ...cur };
+        if (patch.sims !== undefined && Number.isFinite(patch.sims)) next.sims = Math.max(1, Math.round(patch.sims));
+        if (patch.timeMs !== undefined && Number.isFinite(patch.timeMs)) next.timeMs = Math.max(100, Math.round(patch.timeMs));
+        if (patch.cPuct !== undefined && Number.isFinite(patch.cPuct)) next.cPuct = Math.max(0, patch.cPuct);
+        if (patch.temperature !== undefined && Number.isFinite(patch.temperature)) next.temperature = Math.max(0, patch.temperature);
+        if (patch.enabled !== undefined) next.enabled = patch.enabled;
+        set({ mcts: next });
       },
 
       chooseModelMove(i) {
@@ -349,7 +435,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         epSquare = last ? epTargetAfterMove(last) : null;
         lastMove = last ? { fromIdx: algToIdx(last.from), toIdx: algToIdx(last.to) } : null;
         candidates = null;
-        commit({ lastModelMove: null });
+        commit({ lastModelMove: null, search: null });
       },
 
       legalTargets(fromIdx) {

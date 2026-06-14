@@ -43,8 +43,8 @@ export { createWorkerEngineClient } from './game/engineClient.ts';
 export type { EngineClient, EngineMeta, ForwardReply } from './game/engineClient.ts';
 
 // Game + play loop.
-export { createGameStore } from './game/gameStore.ts';
-export type { GameStore, GameState, GameStatus, ModelMoveInfo, ModelCandidate, PromotionPiece } from './game/gameStore.ts';
+export { createGameStore, MCTS_DEFAULTS } from './game/gameStore.ts';
+export type { GameStore, GameState, GameStatus, ModelMoveInfo, ModelCandidate, PromotionPiece, MctsSettings } from './game/gameStore.ts';
 export {
   algToIdx,
   idxToAlg,
@@ -67,3 +67,18 @@ export type { TraceField } from './model-graph/traceIndex.ts';
 
 export { content, CONTENT } from './content/registry.ts';
 export type { ContentCard } from './content/registry.ts';
+
+// ── Search (MCTS) — optional "think harder" move generator + its visualization.
+export { MCTS, makeEngineEvaluator, runSearch } from './search/index.ts';
+export type {
+  Evaluator,
+  LeafEvaluation,
+  SearchContext,
+  MCTSConfig,
+  RunSearchHooks,
+  MoveLite,
+  RootChildStat,
+  SearchSnapshot,
+  SearchOptions,
+  SearchResult,
+} from './search/index.ts';

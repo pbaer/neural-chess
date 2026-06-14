@@ -7,6 +7,8 @@
 import * as Comlink from 'comlink';
 import { createEngine, type Engine } from './index.ts';
 import type { CapsuleConfig } from './capsule.ts';
+import { makeEngineEvaluator, runSearch } from '../search/index.ts';
+import type { SearchOptions, SearchResult, SearchSnapshot } from '../search/types.ts';
 
 export interface EngineMeta {
   modelId: string;
@@ -32,6 +34,10 @@ export interface ForwardReply {
 }
 
 let enginePromise: Promise<Engine> | null = null;
+
+// Monotonic id so a newer search (or an explicit cancel) supersedes an in-flight
+// one: the running loop bails as soon as its id is no longer the active id.
+let activeSearchId = 0;
 
 const api = {
   /** Fetch + parse the capsule and build the engine. Returns model metadata. */
@@ -67,6 +73,33 @@ const api = {
       trace,
     };
     return Comlink.transfer(reply, transfers);
+  },
+
+  /**
+   * Run AlphaZero-style PUCT MCTS from `fen` entirely inside the worker (the tree
+   * loop calls the in-thread engine for each leaf — no per-eval round trip). The
+   * search uses ONLY the model's P/V. `onProgress` (a Comlink proxy) receives
+   * throttled live snapshots. A newer search() or cancelSearch() supersedes this.
+   */
+  async search(
+    fen: string,
+    options: SearchOptions,
+    onProgress?: (snap: SearchSnapshot) => void,
+  ): Promise<SearchResult> {
+    if (!enginePromise) throw new Error('Worker not initialized — call init(capsuleUrl) first.');
+    const engine = await enginePromise;
+    const myId = ++activeSearchId;
+    const evaluator = makeEngineEvaluator(engine);
+    return runSearch(fen, evaluator, options, {
+      onProgress: onProgress ? (snap) => void onProgress(snap) : undefined,
+      shouldCancel: () => myId !== activeSearchId,
+      yieldToHost: () => new Promise((resolve) => setTimeout(resolve, 0)),
+    });
+  },
+
+  /** Cancel any in-flight search (e.g. on reset / new game / undo). */
+  cancelSearch(): void {
+    activeSearchId++;
   },
 };
 

@@ -8,6 +8,8 @@ import { Board } from './play/Board.tsx';
 import { GameControls } from './play/GameControls.tsx';
 import { MoveCandidates } from './play/MoveCandidates.tsx';
 import { MoveHistory } from './play/MoveHistory.tsx';
+import { SearchControls } from './play/SearchControls.tsx';
+import { SearchPanel } from './play/SearchPanel.tsx';
 import { ValueGauge } from './play/ValueGauge.tsx';
 import { useGame } from './play/useGame.ts';
 import { ModelInspector } from './viz/ModelInspector.tsx';
@@ -57,6 +59,12 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
     if (!choosing) setHoverUci(null);
   }, [choosing]);
 
+  // Which MCTS root move (by uci) the user is hovering in the stats table — used
+  // to accent the matching visit-weighted arrow on the board.
+  const [searchHoverUci, setSearchHoverUci] = useState<string | null>(null);
+  const showSearchArrows = thinking && state.mcts.enabled;
+  const modelColor: typeof state.humanColor = state.humanColor === 'w' ? 'b' : 'w';
+
   const statusLine = (() => {
     if (error) return error;
     if (!ready) return 'Loading model…';
@@ -71,7 +79,14 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
   return (
     <main className="layout layout-viz">
       <section className="board-col">
-        <Board store={store} state={state} disabled={boardDisabled} hoverUci={hoverUci} />
+        <Board
+          store={store}
+          state={state}
+          disabled={boardDisabled}
+          hoverUci={hoverUci}
+          searchChildren={showSearchArrows ? state.search?.children ?? null : null}
+          searchHoverUci={searchHoverUci}
+        />
         <div className={'status' + (state.inCheck && state.status !== 'over' ? ' status-check' : '')}>
           {statusLine}
           {state.inCheck && state.status !== 'over' && <span className="check-tag"> · check</span>}
@@ -82,6 +97,18 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
         )}
 
         <GameControls store={store} state={state} disabled={!ready} />
+
+        <SearchControls store={store} state={state} disabled={!ready} />
+
+        {state.search && (
+          <SearchPanel
+            search={state.search}
+            thinking={thinking}
+            modelColor={modelColor}
+            onHover={setSearchHoverUci}
+            hoverUci={searchHoverUci}
+          />
+        )}
 
         <ValueGauge model={state.lastModelMove} modelColor={state.humanColor === 'w' ? 'b' : 'w'} />
 

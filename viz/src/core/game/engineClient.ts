@@ -7,12 +7,21 @@
 
 import * as Comlink from 'comlink';
 import type { WorkerApi, EngineMeta, ForwardReply } from '../engine/worker.ts';
+import type { SearchOptions, SearchResult, SearchSnapshot } from '../search/types.ts';
 
 export type { EngineMeta, ForwardReply } from '../engine/worker.ts';
 
 export interface EngineClient {
   whenReady(): Promise<EngineMeta>;
   forward(planes: Float32Array, legalMask: Uint8Array, wantTrace?: boolean): Promise<ForwardReply>;
+  /** Optional MCTS search (off the main thread). Present on the worker client. */
+  search?(
+    fen: string,
+    options: SearchOptions,
+    onProgress?: (snap: SearchSnapshot) => void,
+  ): Promise<SearchResult>;
+  /** Cancel any in-flight search. */
+  cancelSearch?(): void;
   dispose(): void;
 }
 
@@ -30,6 +39,15 @@ export function createWorkerEngineClient(capsuleUrl: string): EngineClient {
     async forward(planes, legalMask, wantTrace = false) {
       await ready;
       return api.forward(planes, legalMask, wantTrace);
+    },
+    async search(fen, options, onProgress) {
+      await ready;
+      // Proxy the progress callback so the worker can invoke it across threads.
+      const cb = onProgress ? Comlink.proxy(onProgress) : undefined;
+      return api.search(fen, options, cb);
+    },
+    cancelSearch() {
+      void api.cancelSearch();
     },
     dispose() {
       api[Comlink.releaseProxy]();
