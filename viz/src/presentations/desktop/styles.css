@@ -65,7 +65,15 @@ body {
 
 .app-header {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+}
+
+/* h1 and the theme toggle share the top row; the subtitle drops to its own
+   full-width line below so it can use all available width (and never wraps
+   prematurely on narrow/mobile viewports). */
+.app-header-top {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }

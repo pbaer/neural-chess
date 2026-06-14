@@ -20,13 +20,13 @@ export function App() {
   return (
     <div className="app app-wide">
       <header className="app-header">
-        <div className="app-header-text">
+        <div className="app-header-top">
           <h1>Neural Chess</h1>
-          <p className="subtitle">
-            Play a tiny chess model in your browser
-          </p>
+          <ThemeToggle />
         </div>
-        <ThemeToggle />
+        <p className="subtitle">
+          Play a tiny chess model in your browser
+        </p>
       </header>
       {store ? (
         <GameView store={store} client={client} capsuleUrl={capsuleUrl} ready={ready} meta={meta} error={error} />
@@ -147,11 +147,16 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
           )}
         </div>
 
-        {showSuggestions && state.suggestions && (
-          <MoveCandidates store={store} candidates={state.suggestions} onHover={setHoverUci} />
-        )}
-
-        <GameControls store={store} state={state} disabled={!ready} />
+        <GameControls
+          store={store}
+          state={state}
+          disabled={!ready}
+          suggestions={
+            showSuggestions && state.suggestions ? (
+              <MoveCandidates store={store} candidates={state.suggestions} onHover={setHoverUci} />
+            ) : null
+          }
+        />
 
         <ModelConfig store={store} state={state} disabled={!ready} />
 

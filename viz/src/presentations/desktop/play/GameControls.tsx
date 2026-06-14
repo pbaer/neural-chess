@@ -2,16 +2,23 @@
 // through the core game store; the engine auto-replies when it's the model's
 // turn (e.g. play as Black → model moves first).
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Color, GameState, GameStore } from '../../../core/index.ts';
 
 export interface GameControlsProps {
   store: GameStore;
   state: GameState;
   disabled: boolean;
+  /**
+   * Optional move-assistant suggestion list, rendered directly BELOW the "Show
+   * model hints" toggle. Kept here (rather than above the controls) so toggling
+   * the checkbox appends/removes the list beneath it and never shifts the
+   * checkbox's own position.
+   */
+  suggestions?: ReactNode;
 }
 
-export function GameControls({ store, state, disabled }: GameControlsProps) {
+export function GameControls({ store, state, disabled, suggestions }: GameControlsProps) {
   const [fen, setFen] = useState('');
   const [fenError, setFenError] = useState<string | null>(null);
   // FEN-setup mode: the "Paste FEN" row is only revealed once the user clicks the
@@ -60,6 +67,8 @@ export function GameControls({ store, state, disabled }: GameControlsProps) {
         />
         <span className="control-label">Show model hints of its top moves for you</span>
       </label>
+
+      {suggestions}
 
       {fenMode && (
         <div className="control-row">
