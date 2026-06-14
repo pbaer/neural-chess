@@ -19,7 +19,7 @@ import { Heatmap, HEATMAP_GUTTER, Legend } from '../render/Heatmap.tsx';
 import { colorScaleOf, diverging, niceSeq, rangeOf, rgbCss, sequential } from '../render/colormap.ts';
 import { ContentCard } from '../ContentCard.tsx';
 import { AttentionBoard } from './AttentionBoard.tsx';
-import { pieceGlyph } from '../../play/pieces.ts';
+import { Piece } from '../../play/pieces.tsx';
 import { ScalarInspector, type ScalarView } from '../scalar/ScalarInspector.tsx';
 
 const PLANE_NAMES = [
@@ -66,21 +66,16 @@ function BoardGlyphs({ board, turn }: { board: (PieceCell | null)[]; turn: Color
           if (!piece) return null;
           const dark = piece.color === 'b';
           return (
-            <text
+            <Piece
               key={s}
-              x={f + 0.5}
-              y={dr + 0.52}
-              fontSize={0.66}
-              textAnchor="middle"
-              dominantBaseline="central"
+              type={piece.type}
+              cx={f + 0.5}
+              cy={dr + 0.5}
+              size={0.9}
               fill={dark ? '#141414' : '#f6f6f4'}
               stroke={dark ? '#e9edf2' : '#1d2128'}
-              strokeWidth={0.07}
-              paintOrder="stroke"
-              style={{ userSelect: 'none' }}
-            >
-              {pieceGlyph(piece.color, piece.type)}
-            </text>
+              strokeWidth={7}
+            />
           );
         }),
       )}

@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import type { Color, PieceType } from '../../../../core/index.ts';
-import { pieceGlyph } from '../../play/pieces.ts';
+import { Piece } from '../../play/pieces.tsx';
 import { niceSeq, rangeOf, sequential, rgbCss } from '../render/colormap.ts';
 import { Legend } from '../render/Heatmap.tsx';
 import type { ScalarView } from '../scalar/ScalarInspector.tsx';
@@ -161,20 +161,15 @@ export function AttentionBoard({ probs, scores, relBias, heads, fen, turn, onSca
                 >
                   <rect x={f} y={dr} width={1} height={1} fill={fill} />
                   {piece && (
-                    <text
-                      x={f + 0.5}
-                      y={dr + 0.52}
-                      fontSize={0.66}
-                      textAnchor="middle"
-                      dominantBaseline="central"
+                    <Piece
+                      type={piece.type}
+                      cx={f + 0.5}
+                      cy={dr + 0.5}
+                      size={0.9}
                       fill={piece.color === 'w' ? '#f6f6f4' : '#141414'}
                       stroke={piece.color === 'w' ? '#1d2128' : '#e9edf2'}
-                      strokeWidth={0.07}
-                      paintOrder="stroke"
-                      style={{ pointerEvents: 'none', userSelect: 'none' }}
-                    >
-                      {pieceGlyph(piece.color, piece.type)}
-                    </text>
+                      strokeWidth={7}
+                    />
                   )}
                 </g>
               );

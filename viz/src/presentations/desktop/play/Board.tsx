@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react';
 import type { Color, GameState, GameStore, PieceType, PromotionPiece } from '../../../core/index.ts';
-import { pieceGlyph } from './pieces.ts';
+import { Piece, PieceGlyph } from './pieces.tsx';
 
 interface Cell {
   color: Color;
@@ -150,19 +150,15 @@ export function Board({ store, state, disabled, hoverUci }: BoardProps) {
                   </text>
                 )}
                 {piece && (
-                  <text
-                    x={c + 0.5}
-                    y={r + 0.5}
-                    fontSize={0.78}
-                    textAnchor="middle"
-                    dominantBaseline="central"
+                  <Piece
+                    type={piece.type}
+                    cx={c + 0.5}
+                    cy={r + 0.5}
+                    size={0.96}
                     fill={piece.color === 'w' ? '#f7f7f5' : '#1a1a1a'}
-                    stroke="#333"
-                    strokeWidth={0.016}
-                    style={{ pointerEvents: 'none', userSelect: 'none' }}
-                  >
-                    {pieceGlyph(piece.color, piece.type)}
-                  </text>
+                    stroke={piece.color === 'w' ? '#33312c' : '#1a1a1a'}
+                    strokeWidth={3.5}
+                  />
                 )}
                 {isTarget && !piece && <circle cx={c + 0.5} cy={r + 0.5} r={0.16} fill="#2c2c2c" opacity={0.35} />}
                 {isTarget && piece && (
@@ -242,7 +238,7 @@ export function Board({ store, state, disabled, hoverUci }: BoardProps) {
           <span className="promo-label">Promote to:</span>
           {(['q', 'r', 'b', 'n'] as PromotionPiece[]).map((p) => (
             <button key={p} className="promo-btn" onClick={() => choosePromo(p)}>
-              {pieceGlyph(state.humanColor, p as PieceType)}
+              <PieceGlyph color={state.humanColor} type={p as PieceType} />
             </button>
           ))}
           <button className="promo-cancel" onClick={() => setPendingPromo(null)}>
