@@ -41,7 +41,7 @@ from src.v3.inference import save_v3_checkpoint
 class PackedCorpus:
     """Loads the packed artifact fully into RAM and serves GPU-unpacked batches."""
 
-    def __init__(self, packed_dir, device):
+    def __init__(self, packed_dir, device, distill_dir=None):
         with open(os.path.join(packed_dir, 'meta.json')) as f:
             self.meta = json.load(f)
         self.device = device
@@ -67,6 +67,17 @@ class PackedCorpus:
               + self.value_avg.nbytes + self.count.nbytes + self.split.nbytes) / 1e9
         print(f"loaded packed corpus into RAM: {gb:.1f}GB in {time.time()-t0:.0f}s "
               f"(U={U:,} PB={self.PB} K={self.K})", flush=True)
+
+        self.has_teacher = distill_dir is not None
+        if self.has_teacher:
+            self.t_moves = np.fromfile(os.path.join(distill_dir, 'teacher_moves.bin'),
+                                       np.int16).reshape(U, -1)
+            self.t_logits = np.fromfile(os.path.join(distill_dir, 'teacher_logits.bin'),
+                                        np.float16).reshape(U, -1)
+            self.t_value = np.fromfile(os.path.join(distill_dir, 'teacher_value.bin'), np.float16)
+            print(f"loaded teacher targets {self.t_moves.shape} "
+                  f"({(self.t_moves.nbytes+self.t_logits.nbytes+self.t_value.nbytes)/1e9:.1f}GB) "
+                  f"from {distill_dir}", flush=True)
 
         # GPU-side constants for unpacking
         self.binary_idx = torch.tensor(binp, dtype=torch.long, device=device)
@@ -97,6 +108,13 @@ class PackedCorpus:
         pm = torch.from_numpy(self.pol_moves[idx].astype(np.int64)).to(self.device, non_blocking=True)
         pp = torch.from_numpy(self.pol_probs[idx].astype(np.float32)).to(self.device, non_blocking=True)
         return x, val, pm, pp
+
+    def fetch_teacher(self, idx):
+        """Teacher top-K (move indices, raw logits) + value for distillation."""
+        tm = torch.from_numpy(self.t_moves[idx].astype(np.int64)).to(self.device, non_blocking=True)
+        tl = torch.from_numpy(self.t_logits[idx].astype(np.float32)).to(self.device, non_blocking=True)
+        tv = torch.from_numpy(self.t_value[idx].astype(np.float32)).to(self.device, non_blocking=True)
+        return tm, tl, tv
 
 
 class TemperedDraw:
@@ -191,6 +209,13 @@ def main():
                     help='disable absolute pos embedding; rely on geometry bias (v3.2 R4)')
     ap.add_argument('--share-blocks', action='store_true',
                     help='reuse ONE transformer block across all n_blocks (v3.2 R6)')
+    # distillation from a precomputed teacher (src/v3/teacher_label.py)
+    ap.add_argument('--distill-dir', default=None,
+                    help='dir with teacher_{moves,logits,value}.bin aligned to the corpus')
+    ap.add_argument('--distill-alpha', type=float, default=0.0,
+                    help='0=pure human labels, 1=pure teacher; mixes policy+value losses')
+    ap.add_argument('--distill-temp', type=float, default=1.0,
+                    help='softmax temperature on the teacher top-K logits')
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -199,7 +224,7 @@ def main():
     torch.backends.cudnn.allow_tf32 = True
     torch.backends.cudnn.benchmark = True
 
-    corpus = PackedCorpus(args.packed_dir, device)
+    corpus = PackedCorpus(args.packed_dir, device, distill_dir=args.distill_dir)
     sampler = TemperedDraw(corpus.count[corpus.train_idx], corpus.train_idx, args.tau, args.seed)
     steps_per_epoch = args.epoch_size // args.batch_size
     horizon_steps = args.lr_horizon * steps_per_epoch
@@ -266,11 +291,21 @@ def main():
                 g['lr'] = args.lr * lr_factor(gstep, args.warmup_steps, horizon_steps)
             b = ep_idx[bi * args.batch_size:(bi + 1) * args.batch_size]
             x, val, pm, pp = corpus.fetch(b)
+            distilling = corpus.has_teacher and args.distill_alpha > 0
+            if distilling:
+                tm, tl, tv = corpus.fetch_teacher(b)
             with torch.amp.autocast('cuda', dtype=torch.bfloat16):
                 logits, value = train_model(x)
                 value = value.squeeze(-1)
                 pol = policy_loss_soft(logits, pm, pp)
                 vloss = F.mse_loss(value, val)
+                if distilling:
+                    tprob = F.softmax(tl / args.distill_temp, dim=1)
+                    d_pol = -(tprob * F.log_softmax(logits, dim=1).gather(1, tm)).sum(1).mean()
+                    d_val = F.mse_loss(value, tv)
+                    a = args.distill_alpha
+                    pol = (1 - a) * pol + a * d_pol
+                    vloss = (1 - a) * vloss + a * d_val
                 loss = pol + args.value_loss_weight * vloss
             opt.zero_grad(set_to_none=True)
             loss.backward()

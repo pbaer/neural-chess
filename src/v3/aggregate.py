@@ -86,7 +86,7 @@ def _encoded_move(board: chess.Board, move: chess.Move) -> int:
 
 def build(filtered_dir, out_dir, target_instances, tier_mix=None,
           skip_first_plies=2, seed=0, val_mod=20, cap_unique=None,
-          progress_every=500000):
+          progress_every=500000, min_elo=0):
     if tier_mix is None:
         tier_mix = {'top': 0.65, 'mid': 0.25, 'low': 0.10}
     if cap_unique is None:
@@ -140,6 +140,14 @@ def build(filtered_dir, out_dir, target_instances, tier_mix=None,
                 result = game.headers.get('Result', '*')
                 if result not in ('1-0', '0-1', '1/2-1/2'):
                     continue
+                if min_elo > 0:
+                    try:
+                        we = int(game.headers.get('WhiteElo', '0'))
+                        be = int(game.headers.get('BlackElo', '0'))
+                    except (ValueError, TypeError):
+                        continue
+                    if min(we, be) < min_elo:
+                        continue
                 n_games += 1
                 board = game.board()
                 ply = 0
@@ -251,6 +259,7 @@ def build(filtered_dir, out_dir, target_instances, tier_mix=None,
         'val_mod': val_mod,
         'n_val': int(split.sum()),
         'seed': seed,
+        'min_elo': min_elo,
         'unique_ratio': float(U / max(n_inst, 1)),
     }
     with open(os.path.join(tmp_dir, 'meta.json'), 'w') as f:
@@ -275,8 +284,10 @@ if __name__ == '__main__':
     ap.add_argument('--val-mod', type=int, default=20, help='1/N positions held out')
     ap.add_argument('--cap-unique', type=int, default=None)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--min-elo', type=int, default=0,
+                    help='skip games where min(WhiteElo, BlackElo) < this (expert filter)')
     args = ap.parse_args()
     build(args.filtered_dir, args.out_dir, args.instances,
           tier_mix={'top': args.top_pct, 'mid': args.mid_pct, 'low': args.low_pct},
           skip_first_plies=args.skip_plies, seed=args.seed,
-          val_mod=args.val_mod, cap_unique=args.cap_unique)
+          val_mod=args.val_mod, cap_unique=args.cap_unique, min_elo=args.min_elo)
