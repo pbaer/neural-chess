@@ -6,6 +6,8 @@
   "stem_blocks": 0,
   "stem_kernel": 1,
   "geometry_bias": true,
+  "use_pos_emb": true,
+  "share_blocks": false,
   "value_hidden": 64,
   "checkpoint_every": 0,
   "input_planes": 21,
