@@ -64,19 +64,7 @@ function BoardGlyphs({ board, turn }: { board: (PieceCell | null)[]; turn: Color
           const s = (7 - dr) * 8 + f; // engine-frame square (rank 0 at the bottom)
           const piece = board[turn === 'w' ? s : s ^ 56];
           if (!piece) return null;
-          const dark = piece.color === 'b';
-          return (
-            <Piece
-              key={s}
-              type={piece.type}
-              cx={f + 0.5}
-              cy={dr + 0.5}
-              size={0.9}
-              fill={dark ? '#141414' : '#f6f6f4'}
-              stroke={dark ? '#e9edf2' : '#1d2128'}
-              strokeWidth={7}
-            />
-          );
+          return <Piece key={s} type={piece.type} color={piece.color} cx={f + 0.5} cy={dr + 0.5} size={0.92} halo />;
         }),
       )}
     </g>

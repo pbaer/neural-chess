@@ -33,7 +33,37 @@ export function App() {
       ) : (
         <div className="status">{error ?? 'Loading model…'}</div>
       )}
+      <Footer />
     </div>
+  );
+}
+
+const REPO_URL = 'https://github.com/pbaer/neural-chess';
+
+/** Small, muted footer: license, third-party attribution, and a repo link. */
+function Footer() {
+  return (
+    <footer className="app-footer">
+      <a href={`${REPO_URL}/blob/master/LICENSE`} target="_blank" rel="noopener noreferrer">
+        MIT © Peter Baer
+      </a>
+      <span className="app-footer-sep" aria-hidden="true">·</span>
+      <span>
+        chess pieces:{' '}
+        <a
+          href="https://github.com/lichess-org/lila/tree/master/public/piece/cburnett"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          cburnett
+        </a>{' '}
+        (BSD)
+      </span>
+      <span className="app-footer-sep" aria-hidden="true">·</span>
+      <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+        github.com/pbaer/neural-chess
+      </a>
+    </footer>
   );
 }
 

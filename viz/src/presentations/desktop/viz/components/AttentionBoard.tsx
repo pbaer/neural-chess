@@ -161,15 +161,7 @@ export function AttentionBoard({ probs, scores, relBias, heads, fen, turn, onSca
                 >
                   <rect x={f} y={dr} width={1} height={1} fill={fill} />
                   {piece && (
-                    <Piece
-                      type={piece.type}
-                      cx={f + 0.5}
-                      cy={dr + 0.5}
-                      size={0.9}
-                      fill={piece.color === 'w' ? '#f6f6f4' : '#141414'}
-                      stroke={piece.color === 'w' ? '#1d2128' : '#e9edf2'}
-                      strokeWidth={7}
-                    />
+                    <Piece type={piece.type} color={piece.color} cx={f + 0.5} cy={dr + 0.5} size={0.92} halo />
                   )}
                 </g>
               );

@@ -167,15 +167,7 @@ export function Board({ store, state, disabled, hoverUci, searchChildren, search
                   </text>
                 )}
                 {piece && (
-                  <Piece
-                    type={piece.type}
-                    cx={c + 0.5}
-                    cy={r + 0.5}
-                    size={0.96}
-                    fill={piece.color === 'w' ? '#f7f7f5' : '#1a1a1a'}
-                    stroke={piece.color === 'w' ? '#33312c' : '#1a1a1a'}
-                    strokeWidth={3.5}
-                  />
+                  <Piece type={piece.type} color={piece.color} cx={c + 0.5} cy={r + 0.5} size={0.95} />
                 )}
                 {isTarget && !piece && <circle cx={c + 0.5} cy={r + 0.5} r={0.16} fill="#2c2c2c" opacity={0.35} />}
                 {isTarget && piece && (

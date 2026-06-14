@@ -1431,3 +1431,33 @@ body {
   background: var(--accent-2);
   opacity: 0.7;
 }
+
+/* ---- footer ---- */
+/* Understated site footer: license, attribution, repo link. Deliberately small
+   and muted so it never competes with the tool. */
+.app-footer {
+  margin-top: 32px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.app-footer a {
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.app-footer a:hover {
+  color: var(--text);
+  border-bottom-color: var(--line);
+}
+
+.app-footer-sep {
+  color: var(--line);
+}

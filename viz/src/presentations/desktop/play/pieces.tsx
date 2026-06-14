@@ -1,73 +1,86 @@
-// Chess pieces as vector SVG silhouettes (single path each) — self-contained,
-// no image assets and no fonts. We deliberately do NOT use Unicode chess glyphs
-// (♙♟♔ …): iOS Safari emoji-substitutes some of those code points (pawns), which
-// ignores the SVG `fill` (a "white" pawn shows the dark emoji), uses different
-// metrics (pawns too big, others too small) and mis-baselines them (sit too high).
-// Vector paths render identically on every platform.
+// Chess pieces — the **cburnett** vector set (the standard Wikipedia / Lichess
+// pieces, by Colin M.L. Burnett). Used here under the BSD license; see
+// `viz/THIRD_PARTY.md` and the repo `THIRD_PARTY.md` for attribution.
 //
-// Each path is authored in a 0..100 box, bbox-centered on (50,50), so a piece
-// drops into any square by translating to its centre. Colour is conveyed purely
-// by `fill` (white = light fill + dark outline, black = dark fill), with a stroke
-// that doubles as a legibility halo over heatmap / attention tints. The original
-// matched silhouette set (CC0 / no third-party assets) keeps the public site
-// license-clean. Both colours use the same shape; the knight faces left.
+// These are *complete, pre-colored* SVGs (white = light fill + dark outline;
+// black = dark fill + outline with light interior strokes), NOT silhouettes to
+// be tinted — so the caller picks the piece by `color` (w/b) and we render that
+// variant's own markup verbatim. This differs from the old hand-authored set,
+// which conveyed colour through a single `fill`.
+//
+// We deliberately do NOT use Unicode chess glyphs (♙♟♔ …): iOS Safari
+// emoji-substitutes some of those code points, which ignores SVG fills, uses
+// different metrics and mis-baselines them. Vector paths render identically on
+// every platform. Each piece is authored in a 0..45 box (the cburnett standard);
+// it drops into any square by translating the box centre to the square centre.
+//
+// Over colored heatmap / attention cells, cburnett's dark outlines already give
+// good legibility; an optional `halo` adds a soft contrast glow (dark behind a
+// white piece, light behind a black piece) for the inspector boards.
 
 import type { Color, PieceType } from '../../../core/index.ts';
 
-export const PIECE_PATHS: Record<PieceType, string> = {
-  p: 'M34 76L31 72C31 69 35 68 40 67L44 52C37 49 36 41 39 35C41 28 45 24 50 24C55 24 59 28 61 35C64 41 63 49 56 52L60 67C65 68 69 69 69 72L66 76Z',
-  n: 'M79.5 84.5L79.5 79.5C78.5 71.5 75.5 64.5 69.5 57.5C65.5 50.5 64.5 42.5 67.5 34.5L70.5 24.5L65.5 17.5L61.5 25.5L56.5 15.5L54.5 27.5C51.5 31.5 46.5 33.5 40.5 34.5L31.5 36.5C25.5 39.5 21.5 43.5 20.5 48.5L24.5 53.5L31.5 54.5L38.5 52.5C42.5 54.5 45.5 58.5 45.5 63.5C45.5 70.5 43.5 76.5 40.5 79.5L37.5 84.5Z',
-  b: 'M26 84L29 80C33 77 34 74 33 70C37 68 40 66 40 60C34 56 32 48 36 41C39 35 44 31 44 25C44 20 47 16 50 16C53 16 56 20 56 25C56 31 61 35 64 41C68 48 66 56 60 60C60 66 63 68 67 70C66 74 67 77 71 80L74 84Z',
-  r: 'M24 81L27 77C29 73 30 69 30 63L33 61L33 39L28 35L28 19L34 19L34 25L42 25L42 19L50 19L58 19L58 25L66 25L66 19L72 19L72 35L67 39L67 61L70 63C70 69 71 73 73 77L76 81Z',
-  q: 'M26 86L30 82C33 78 33 72 31 66L29 40L24 20L33 32L40 16L46 30L50 14L54 30L60 16L67 32L76 20L71 40L69 66C67 72 67 78 70 82L74 86Z',
-  k: 'M26 90L30 86C33 82 33 76 31 70L29 46L27 32L36 40L44 30L44 22L38 22L38 16L44 16L44 10L50 10L56 10L56 16L62 16L62 22L56 22L56 30L64 40L73 32L71 46L69 70C67 76 67 82 70 86L74 90Z',
+const VIEWBOX = 45;
+
+/** Inner SVG markup (paths only) of each cburnett piece, viewBox 0 0 45 45. */
+const PIECE_SVG: Record<Color, Record<PieceType, string>> = {
+  w: {
+    p: `<path fill="#fff" stroke="#000" stroke-linecap="round" stroke-width="1.5" d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z"/>`,
+    n: `<g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path fill="#fff" d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path fill="#fff" d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><path fill="#000" d="M9.5 25.5a.5.5 0 1 1-1 0 .5.5 0 1 1 1 0m5.433-9.75a.5 1.5 30 1 1-.866-.5.5 1.5 30 1 1 .866.5"/></g>`,
+    b: `<g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><g fill="#fff" stroke-linecap="butt"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.35.49-2.32.47-3-.5 1.35-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><path d="M25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z"/></g><path stroke-linejoin="miter" d="M17.5 26h10M15 30h15m-7.5-14.5v5M20 18h5"/></g>`,
+    r: `<g fill="#fff" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path stroke-linecap="butt" d="M9 39h27v-3H9zm3-3v-4h21v4zm-1-22V9h4v2h5V9h5v2h5V9h4v5"/><path d="m34 14-3 3H14l-3-3"/><path stroke-linecap="butt" stroke-linejoin="miter" d="M31 17v12.5H14V17"/><path d="m31 29.5 1.5 2.5h-20l1.5-2.5"/><path fill="none" stroke-linejoin="miter" d="M11 14h23"/></g>`,
+    q: `<g fill="#fff" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M8 12a2 2 0 1 1-4 0 2 2 0 1 1 4 0m16.5-4.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0M41 12a2 2 0 1 1-4 0 2 2 0 1 1 4 0M16 8.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0M33 9a2 2 0 1 1-4 0 2 2 0 1 1 4 0"/><path stroke-linecap="butt" d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14z"/><path stroke-linecap="butt" d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path fill="none" d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0"/></g>`,
+    k: `<g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path stroke-linejoin="miter" d="M22.5 11.63V6M20 8h5"/><path fill="#fff" stroke-linecap="butt" stroke-linejoin="miter" d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path fill="#fff" d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0"/></g>`,
+  },
+  b: {
+    p: `<path stroke="#000" stroke-linecap="round" stroke-width="1.5" d="M22.5 9a4 4 0 0 0-3.22 6.38 6.48 6.48 0 0 0-.87 10.65c-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47a6.46 6.46 0 0 0-.87-10.65A4.01 4.01 0 0 0 22.5 9z"/>`,
+    n: `<g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path fill="#000" d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path fill="#000" d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.04-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-1-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-2 2.5-3c1 0 1 3 1 3"/><path fill="#ececec" stroke="#ececec" d="M9.5 25.5a.5.5 0 1 1-1 0 .5.5 0 1 1 1 0m5.43-9.75a.5 1.5 30 1 1-.86-.5.5 1.5 30 1 1 .86.5"/><path fill="#ececec" stroke="none" d="m24.55 10.4-.45 1.45.5.15c3.15 1 5.65 2.49 7.9 6.75S35.75 29.06 35.25 39l-.05.5h2.25l.05-.5c.5-10.06-.88-16.85-3.25-21.34s-5.79-6.64-9.19-7.16z"/></g>`,
+    b: `<g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><g fill="#000" stroke-linecap="butt"><path d="M9 36c3.4-1 10.1.4 13.5-2 3.4 2.4 10.1 1 13.5 2 0 0 1.6.5 3 2-.7 1-1.6 1-3 .5-3.4-1-10.1.5-13.5-1-3.4 1.5-10.1 0-13.5 1-1.4.5-2.3.5-3-.5 1.4-2 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><path d="M25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z"/></g><path stroke="#ececec" stroke-linejoin="miter" d="M17.5 26h10M15 30h15m-7.5-14.5v5M20 18h5"/></g>`,
+    r: `<g fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path stroke-linecap="butt" d="M9 39h27v-3H9zm3.5-7 1.5-2.5h17l1.5 2.5zm-.5 4v-4h21v4z"/><path stroke-linecap="butt" stroke-linejoin="miter" d="M14 29.5v-13h17v13z"/><path stroke-linecap="butt" d="M14 16.5 11 14h23l-3 2.5zM11 14V9h4v2h5V9h5v2h5V9h4v5z"/><path fill="none" stroke="#ececec" stroke-linejoin="miter" stroke-width="1" d="M12 35.5h21m-20-4h19m-18-2h17m-17-13h17M11 14h23"/></g>`,
+    q: `<g fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><g stroke="none"><circle cx="6" cy="12" r="2.75"/><circle cx="14" cy="9" r="2.75"/><circle cx="22.5" cy="8" r="2.75"/><circle cx="31" cy="9" r="2.75"/><circle cx="39" cy="12" r="2.75"/></g><path stroke-linecap="butt" d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5z"/><path stroke-linecap="butt" d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path fill="none" stroke-linecap="butt" d="M11 38.5a35 35 1 0 0 23 0"/><path fill="none" stroke="#ececec" d="M11 29a35 35 1 0 1 23 0m-21.5 2.5h20m-21 3a35 35 1 0 0 22 0m-23 3a35 35 1 0 0 24 0"/></g>`,
+    k: `<g fill="none" fill-rule="evenodd" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path stroke-linejoin="miter" d="M22.5 11.6V6"/><path fill="#000" stroke-linecap="butt" stroke-linejoin="miter" d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path fill="#000" d="M11.5 37a22.3 22.3 0 0 0 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10z"/><path stroke-linejoin="miter" d="M20 8h5"/><path stroke="#ececec" d="M32 29.5s8.5-4 6-9.7C34.1 14 25 18 22.5 24.6v2.1-2.1C20 18 9.9 14 7 19.9c-2.5 5.6 4.8 9 4.8 9"/><path stroke="#ececec" d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0"/></g>`,
+  },
+};
+
+// Soft contrast halo (in 45-unit space) for legibility over colored cells: a
+// dark glow behind white pieces, a light glow behind black pieces.
+const HALO: Record<Color, string> = {
+  w: 'drop-shadow(0 0 0.9px rgba(20,22,28,0.7))',
+  b: 'drop-shadow(0 0 1px rgba(236,240,246,0.9))',
 };
 
 export interface PieceProps {
   type: PieceType;
+  color: Color;
   /** Centre of the target square, in the SVG's own coordinate units. */
   cx: number;
   cy: number;
   /** Piece extent (a full square ≈ 1 on a 0..8 board). The piece is centred. */
   size: number;
-  fill: string;
-  stroke: string;
-  /** Stroke width in the path's 0..100 space, so it scales with the piece. */
-  strokeWidth?: number;
+  /** Add a soft contrast halo for legibility over heatmap / attention tints. */
+  halo?: boolean;
 }
 
-/** One vector piece, centred at (cx,cy) and scaled to `size`. Non-interactive. */
-export function Piece({ type, cx, cy, size, fill, stroke, strokeWidth = 4 }: PieceProps) {
-  const s = size / 100;
+/** One cburnett vector piece, centred at (cx,cy) and scaled to `size`. The
+ *  piece's own colours are baked into its SVG; `color` selects the variant.
+ *  Non-interactive. */
+export function Piece({ type, color, cx, cy, size, halo = false }: PieceProps) {
+  const s = size / VIEWBOX;
   return (
-    <path
-      d={PIECE_PATHS[type]}
+    <g
       transform={`translate(${cx - size / 2} ${cy - size / 2}) scale(${s})`}
-      fill={fill}
-      stroke={stroke}
-      strokeWidth={strokeWidth}
-      strokeLinejoin="round"
-      paintOrder="stroke"
-      style={{ pointerEvents: 'none', userSelect: 'none' }}
+      style={{ pointerEvents: 'none', userSelect: 'none', ...(halo ? { filter: HALO[color] } : null) }}
+      dangerouslySetInnerHTML={{ __html: PIECE_SVG[color][type] }}
     />
   );
 }
 
 /** Standalone piece glyph for HTML contexts (e.g. promotion buttons): a small
- *  square SVG that fills the font box, coloured by side. */
+ *  square SVG that fills the font box. */
 export function PieceGlyph({ color, type }: { color: Color; type: PieceType }) {
-  const white = color === 'w';
   return (
-    <svg viewBox="0 0 100 100" width="1em" height="1em" aria-hidden focusable="false" style={{ display: 'block' }}>
-      <Piece
-        type={type}
-        cx={50}
-        cy={50}
-        size={100}
-        fill={white ? '#f3f3f0' : '#1a1a1a'}
-        stroke={white ? '#333' : '#cfcfcf'}
-        strokeWidth={4}
-      />
+    <svg viewBox="0 0 45 45" width="1em" height="1em" aria-hidden focusable="false" style={{ display: 'block' }}>
+      <Piece type={type} color={color} cx={22.5} cy={22.5} size={45} />
     </svg>
   );
 }
