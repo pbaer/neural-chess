@@ -55,13 +55,23 @@ export interface SearchSnapshot {
 
 /** Configuration for a single search. */
 export interface SearchOptions {
-  /** Number of simulations to run (the search runs exactly this many each move). */
+  /** MAXIMUM number of simulations (the search may stop earlier — see early cutoff). */
   sims: number;
   /** PUCT exploration constant (project default 1.5). */
   cPuct: number;
-  /** Final-move selection temperature (0 = most-visited; >0 samples by N^(1/T)). */
-  temperature: number;
-  /** Optional RNG seed (deterministic temperature sampling / tie-breaks). */
+  /**
+   * Move-variety setting S in [0,1] for the FINAL, value-adaptive move selection
+   * over the searched root moves. 0 = always the most-visited (strongest) move.
+   * The search itself is unchanged; this only governs which searched move is played.
+   */
+  variety: number;
+  /**
+   * Early-cutoff threshold in (0,1]: stop once the top move's visit fraction
+   * reaches this (default 0.7). The search also stops once the visit lead is
+   * unbeatable. At least MIN_SIMS simulations always run first.
+   */
+  cutoffThreshold?: number;
+  /** Optional RNG seed (deterministic selection sampling / tie-breaks). */
   seed?: number;
   /**
    * Position repetition counts (repKey -> count) carried from the real game so

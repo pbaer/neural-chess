@@ -8,7 +8,7 @@ import { Board } from './play/Board.tsx';
 import { GameControls } from './play/GameControls.tsx';
 import { MoveCandidates } from './play/MoveCandidates.tsx';
 import { MoveHistory } from './play/MoveHistory.tsx';
-import { SearchControls } from './play/SearchControls.tsx';
+import { ModelConfig } from './play/ModelConfig.tsx';
 import { SearchPanel } from './play/SearchPanel.tsx';
 import { ValueGauge } from './play/ValueGauge.tsx';
 import { useGame } from './play/useGame.ts';
@@ -134,7 +134,7 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
 
         <GameControls store={store} state={state} disabled={!ready} />
 
-        <SearchControls store={store} state={state} disabled={!ready} />
+        <ModelConfig store={store} state={state} disabled={!ready} />
 
         {state.search && (
           <SearchPanel

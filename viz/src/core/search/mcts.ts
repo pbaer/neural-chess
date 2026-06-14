@@ -244,6 +244,23 @@ export class MCTS {
     return this.root.N;
   }
 
+  /** Top two root-child visit counts (single pass) — for the early-cutoff test. */
+  topTwoChildVisits(): { topN: number; secondN: number } {
+    let topN = 0;
+    let secondN = 0;
+    if (this.root.children) {
+      for (const c of this.root.children.values()) {
+        if (c.N > topN) {
+          secondN = topN;
+          topN = c.N;
+        } else if (c.N > secondN) {
+          secondN = c.N;
+        }
+      }
+    }
+    return { topN, secondN };
+  }
+
   /** Root child stats sorted by visit count (desc), for the PUCT table / arrows. */
   rootChildren(cap = Infinity): RootChildStat[] {
     if (!this.root.children) return [];

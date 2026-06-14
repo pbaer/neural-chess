@@ -50,29 +50,6 @@ export function GameControls({ store, state, disabled }: GameControlsProps) {
         <span className="control-label">Show move suggestions — the model hints its top moves for your side</span>
       </label>
 
-      <div className="control-row temp-row">
-        <span className="control-label">Move variety</span>
-        <input
-          type="range"
-          className="temp-slider"
-          min={0}
-          max={1.5}
-          step={0.05}
-          value={state.temperature}
-          onChange={(e) => store.getState().setTemperature(parseFloat(e.target.value))}
-          disabled={disabled || state.mcts.enabled}
-          aria-label="Move-selection temperature"
-        />
-        <span className="temp-val">{state.temperature <= 0 ? 'top move' : `T = ${state.temperature.toFixed(2)}`}</span>
-      </div>
-      <div className="temp-hint">
-        {state.mcts.enabled
-          ? 'MCTS controls move selection — use the search panel’s exploration temperature.'
-          : state.temperature <= 0
-            ? 'Deterministic: the model always plays its single best move.'
-            : 'The model samples among its preferred moves — higher is more adventurous (and a bit weaker).'}
-      </div>
-
       <div className="control-row">
         <input
           className="fen-input"

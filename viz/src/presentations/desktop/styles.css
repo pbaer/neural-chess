@@ -1217,6 +1217,39 @@ body {
   }
 }
 
+/* ---- Model Configuration block (mode toggle + per-mode params) ---- */
+.model-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.model-config-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-btn {
+  flex: 1;
+}
+
+.model-config-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: -2px;
+}
+
 /* ---- MCTS ("think harder") controls ---- */
 .mcts-controls {
   display: flex;

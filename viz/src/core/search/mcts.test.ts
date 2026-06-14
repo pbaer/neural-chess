@@ -112,6 +112,48 @@ describe('MCTS tree mechanics (deterministic)', () => {
   });
 });
 
+describe('early cutoff (max-sims + snappy play on a dominant move)', () => {
+  it('stops well before the max once one move dominates the visits', async () => {
+    // 1.e4 is hugely favored in the priors → visits concentrate fast → the visit
+    // fraction crosses the 0.7 cutoff long before the 200-sim cap.
+    const evalr = stubEvaluator({ priorFn: (m) => (m.san === 'e4' ? 200 : 1) });
+    const fen = new Chess().fen();
+    const result = await runSearch(fen, evalr, {
+      sims: 200,
+      cPuct: 1.5,
+      variety: 0,
+      cutoffThreshold: 0.7,
+      seed: 1,
+    });
+    expect(result.snapshot.simsDone).toBeGreaterThanOrEqual(10); // MIN_SIMS floor
+    expect(result.snapshot.simsDone).toBeLessThan(200); // cut off early
+    expect(result.move!.san).toBe('e4');
+  });
+
+  it('runs the full budget when no move dominates (close position)', async () => {
+    // Uniform priors + zero value → visits stay spread → no cutoff → all sims run.
+    const result = await runSearch(new Chess().fen(), stubEvaluator(), {
+      sims: 60,
+      cPuct: 3,
+      variety: 0,
+      cutoffThreshold: 0.7,
+      seed: 2,
+    });
+    expect(result.snapshot.simsDone).toBe(60);
+  });
+
+  it('never cuts off below the minimum (tiny budgets run fully)', async () => {
+    const result = await runSearch(new Chess().fen(), stubEvaluator({ priorFn: (m) => (m.san === 'e4' ? 200 : 1) }), {
+      sims: 5,
+      cPuct: 1.5,
+      variety: 0,
+      cutoffThreshold: 0.7,
+      seed: 3,
+    });
+    expect(result.snapshot.simsDone).toBe(5);
+  });
+});
+
 describe('MCTS with the real engine (integration + profiling)', () => {
   it('returns a legal move and is faithful to model priors at low sims', async () => {
     const engine = loadEngine();
@@ -119,7 +161,7 @@ describe('MCTS with the real engine (integration + profiling)', () => {
     const fen = new Chess().fen();
 
     const t0 = performance.now();
-    const result = await runSearch(fen, evalr, { sims: 300, cPuct: 1.5, temperature: 0, seed: 1 });
+    const result = await runSearch(fen, evalr, { sims: 300, cPuct: 1.5, variety: 0, cutoffThreshold: 1, seed: 1 });
     const dt = performance.now() - t0;
 
     expect(result.move).not.toBeNull();

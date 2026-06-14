@@ -13,6 +13,7 @@ import { Chess, validateFen, type Move as ChessMove, type Square } from 'chess.j
 import { featurize, type Color } from '../engine/index.ts';
 import type { EngineClient } from './engineClient.ts';
 import type { SearchOptions, SearchSnapshot } from '../search/types.ts';
+import { selectMoveIndex } from '../search/selection.ts';
 import {
   algToIdx,
   idxToAlg,
@@ -54,24 +55,31 @@ export interface ModelCandidate {
 export const TOP_K_CANDIDATES = 5;
 
 /**
- * Default move-selection temperature for auto-play. 0 = always the model's single
- * best move (deterministic); higher = more variety. ~0.6 keeps play recognisably
- * strong while making every game different — the "interesting" default.
+ * Default "Move variety" S in [0,1] (shared by both modes). 0 = always the model's
+ * single best move (deterministic). ~0.5 keeps play recognisably strong while making
+ * every game different — the "interesting" default. Selection is value-adaptive:
+ * the model sharpens to the best move when losing and explores more when winning,
+ * but never leaves its set of reasonable moves (see core/search/selection.ts).
  */
-export const DEFAULT_TEMPERATURE = 0.6;
+export const DEFAULT_VARIETY = 0.5;
+
+/** Early-cutoff visit-fraction threshold default for MCTS (top move's share). */
+export const MCTS_DEFAULT_CUTOFF = 0.7;
 
 /**
- * Default MCTS ("think harder") settings. The search runs a FIXED number of
- * simulations each move (no wall-clock budget) for predictability — 50 is the
- * project's best in-budget setting and is cheap on the deployed nano model.
- * c_puct 1.5 is the project's tuned value; temperature 0 plays the most-visited
- * (strongest) move.
+ * Default MCTS ("think harder") settings. `sims` is now the MAXIMUM simulation
+ * budget — the search cuts off early once a single move is clearly best (see
+ * cutoffThreshold). 50 is the project's best in-budget setting and is cheap on the
+ * deployed nano model. c_puct 1.5 is the project's tuned value.
  */
-export const MCTS_DEFAULTS = { enabled: false, sims: 50, cPuct: 1.5, temperature: 0 } as const;
+export const MCTS_DEFAULTS = { enabled: false, sims: 50, cPuct: 1.5, cutoffThreshold: MCTS_DEFAULT_CUTOFF } as const;
 
-/** Simulation-count bounds for the MCTS control (fixed sims, no time budget). */
+/** Max-simulation bounds for the MCTS control. */
 export const MCTS_MIN_SIMS = 10;
 export const MCTS_MAX_SIMS = 300;
+/** Early-cutoff threshold bounds for the MCTS control. */
+export const MCTS_MIN_CUTOFF = 0.5;
+export const MCTS_MAX_CUTOFF = 0.95;
 
 /**
  * How long (ms) to flash the move MCTS just chose — using the same gold/red
@@ -92,38 +100,12 @@ export const AUTOPLAY_PREVIEW_MS = 500;
 /** Live-adjustable MCTS settings. */
 export interface MctsSettings {
   enabled: boolean;
-  /** Number of simulations to run each move (exact; no wall-clock budget). */
+  /** MAXIMUM simulations per move (the search may stop earlier — see cutoffThreshold). */
   sims: number;
   /** PUCT exploration constant. */
   cPuct: number;
-  /** Root selection temperature (0 = strongest/most-visited; >0 adds variety). */
-  temperature: number;
-}
-
-/**
- * Pick a legal move index from the policy under a softmax temperature. T≈0 returns
- * the deterministic argmax (the model's top move); larger T samples more widely.
- * Operates on the RAW legal logits so the sampled distribution is the true policy.
- */
-function sampleLegalIndex(
-  logits: Float32Array,
-  legalIndices: number[],
-  bestLegalIndex: number,
-  temperature: number,
-  rng: () => number = Math.random,
-): number {
-  if (temperature <= 1e-3 || legalIndices.length <= 1) return bestLegalIndex;
-  let maxLogit = -Infinity;
-  for (const i of legalIndices) if (logits[i] > maxLogit) maxLogit = logits[i];
-  const weights = legalIndices.map((i) => Math.exp((logits[i] - maxLogit) / temperature));
-  let total = 0;
-  for (const w of weights) total += w;
-  let r = rng() * total;
-  for (let k = 0; k < legalIndices.length; k++) {
-    r -= weights[k];
-    if (r <= 0) return legalIndices[k];
-  }
-  return legalIndices[legalIndices.length - 1];
+  /** Early-cutoff visit-fraction threshold in [0,1] (top move's share of visits). */
+  cutoffThreshold: number;
 }
 
 export interface GameState {
@@ -145,8 +127,8 @@ export interface GameState {
    * (arrows + a candidate list) as hints. The human still makes their own move.
    */
   assist: boolean;
-  /** Softmax temperature for auto-play move selection (0 = deterministic top move). */
-  temperature: number;
+  /** "Move variety" S in [0,1] — shared by both modes (0 = deterministic top move). */
+  variety: number;
   /**
    * Move-assistant suggestions: the model's top-K predicted moves for the HUMAN's
    * own side at the current position. Set only on the human's turn while `assist`
@@ -180,11 +162,11 @@ export interface GameState {
   undo(): void;
   /** Toggle the move assistant. On (the human's turn) → surface move suggestions. */
   setAssist(on: boolean): void;
-  /** Set the auto-play move-selection temperature (clamped ≥ 0). */
-  setTemperature(t: number): void;
-  /** Toggle MCTS ("think harder"). Off = one-shot argmax (today's behavior). */
+  /** Set the "Move variety" S, clamped to [0,1]. */
+  setVariety(s: number): void;
+  /** Select the play mode: false = One-Shot (default), true = MCTS ("think harder"). */
   setMctsEnabled(on: boolean): void;
-  /** Patch MCTS settings (sims / cPuct / temperature). */
+  /** Patch MCTS settings (sims / cPuct / cutoffThreshold). */
   setMctsSettings(patch: Partial<MctsSettings>): void;
   /** Legal destination indices for a piece on `fromIdx` (current side only). */
   legalTargets(fromIdx: number): number[];
@@ -377,7 +359,8 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         const opts: SearchOptions = {
           sims: m.sims,
           cPuct: m.cPuct,
-          temperature: m.temperature,
+          variety: get().variety,
+          cutoffThreshold: m.cutoffThreshold,
           repCounts: repCountsObj,
         };
         let result;
@@ -433,10 +416,17 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       }
       if (token !== thinkToken) return; // superseded by reset/newGame/load
 
-      // Auto-play: sample among the legal moves under the current temperature
-      // (T=0 reproduces the original argmax-over-legal behavior exactly).
+      // Auto-play: value-adaptive, bounded selection over the legal-masked policy.
+      // D = policy probs, V = the value head. variety=0 reproduces the original
+      // argmax-over-legal behavior exactly; otherwise sample within the model's
+      // reasonable moves under a temperature that sharpens when losing / relaxes
+      // when winning. Shared with MCTS via core/search/selection.ts.
       const legalIndices = [...indexToMove.keys()];
-      const chosen = sampleLegalIndex(reply.policyLogits, legalIndices, reply.bestLegalIndex, get().temperature);
+      const pick = selectMoveIndex(
+        legalIndices.map((i) => ({ weight: reply.policyProbs[i] ?? 0 })),
+        { value: reply.value, variety: get().variety },
+      );
+      const chosen = pick >= 0 ? legalIndices[pick] : reply.bestLegalIndex;
       const mv = indexToMove.get(chosen);
       if (!mv) {
         commit({ error: 'Model produced no legal move.' });
@@ -508,7 +498,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       lastMove: null,
       lastModelMove: null,
       assist: false,
-      temperature: DEFAULT_TEMPERATURE,
+      variety: DEFAULT_VARIETY,
       suggestions: null,
       flashMove: null,
       previewMoves: null,
@@ -550,8 +540,8 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         refreshSuggestions(); // compute on the human's turn, else clear
       },
 
-      setTemperature(t) {
-        set({ temperature: Math.max(0, Number.isFinite(t) ? t : 0) });
+      setVariety(s) {
+        set({ variety: Math.min(1, Math.max(0, Number.isFinite(s) ? s : 0)) });
       },
 
       setMctsEnabled(on) {
@@ -565,7 +555,9 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
           next.sims = Math.min(MCTS_MAX_SIMS, Math.max(MCTS_MIN_SIMS, Math.round(patch.sims)));
         }
         if (patch.cPuct !== undefined && Number.isFinite(patch.cPuct)) next.cPuct = Math.max(0, patch.cPuct);
-        if (patch.temperature !== undefined && Number.isFinite(patch.temperature)) next.temperature = Math.max(0, patch.temperature);
+        if (patch.cutoffThreshold !== undefined && Number.isFinite(patch.cutoffThreshold)) {
+          next.cutoffThreshold = Math.min(MCTS_MAX_CUTOFF, Math.max(MCTS_MIN_CUTOFF, patch.cutoffThreshold));
+        }
         if (patch.enabled !== undefined) next.enabled = patch.enabled;
         set({ mcts: next });
       },
