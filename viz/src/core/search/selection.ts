@@ -36,10 +36,11 @@ export interface SelectionConfig {
   relFloor: number;
   /** Reasonable set (MCTS only): drop candidates whose q < (best q) − qMargin. */
   qMargin: number;
-  /** Baseline temperature at S=1, V=0 (even position, max variety slider). */
-  baseTemp: number;
-  /** Temperature gain at V=+1 (fully winning) relative to V=0. */
-  winGain: number;
+  /** Loosest sampling temperature T_max (the ceiling, reached as V→+1, S=1). */
+  maxTemp: number;
+  /** Steepness k of the value modulation m(V)=sigmoid(k·V). k≈9.2 → m(±0.5)≈0.99/0.01
+   *  (saturated by |V|=0.5: fully strong once losing by ½, fully loose winning by ½). */
+  steepness: number;
 }
 
 /**
@@ -47,18 +48,19 @@ export interface SelectionConfig {
  *  - Reasonable set = top-5 policy/visit moves with weight ≥ 12% of the top move's,
  *    and (MCTS) Q within 0.10 of the best — so candidates are always moves the model
  *    actually likes; everything else is unreachable.
- *  - T(V,S) = S · baseTemp · g(V), with g(0)=1, g(+1)=winGain. The losing side is
- *    g(V)=(1+V)² (quadratic) so it sharpens FAST as the model falls behind —
- *    "clearly lost" play is effectively deterministic (top move); the winning side
- *    is linear up to winGain. baseTemp 0.7, winGain 2.5 → T ranges 0 (losing / S=0)
- *    up to ≈1.75 (fully winning at S=1). P(top) highest when losing, lowest winning.
+ *  - T(V,S) = S · maxTemp · m(V), with m(V)=sigmoid(k·V) ∈ [0,1]. A STEEP sigmoid
+ *    (k≈9.2) saturated by |V|=0.5: m(−0.5)≈0.01 (losing by ½ ⇒ ~99% of max strength,
+ *    T≈0, near-deterministic best move), m(0)=0.5 (moderate variety when even),
+ *    m(+0.5)≈0.99 (winning by ½ ⇒ ~99% of max looseness, full variety). Beyond ±0.5
+ *    it's effectively flat. maxTemp 1.5, k 9.2 → T ranges 0 (losing / S=0) up to
+ *    ≈1.5 (winning at S=1). P(top) highest when losing, lowest when winning.
  */
 export const DEFAULT_SELECTION_CONFIG: SelectionConfig = {
   topK: 5,
   relFloor: 0.12,
   qMargin: 0.1,
-  baseTemp: 0.7,
-  winGain: 2.5,
+  maxTemp: 1.5,
+  steepness: 9.2,
 };
 
 /** Inputs that vary per move. */
@@ -76,12 +78,14 @@ function clamp(x: number, lo: number, hi: number): number {
 }
 
 /**
- * Value-adaptive sampling temperature T(V,S).
+ * Value-adaptive sampling temperature T(V,S) = S · maxTemp · m(V), where the value
+ * modulation m(V)=sigmoid(k·V) ∈ [0,1] is a STEEP sigmoid saturated by |V|=0.5:
  *  - S=0 → 0 (deterministic, regardless of V).
- *  - V=−1 (losing) → 0 (sharpen to the best move, maximise strength).
- *  - V=0  (even)   → S · baseTemp (interesting variety).
- *  - V=+1 (winning)→ S · baseTemp · winGain (more spread; give the human a chance).
- * Monotonically non-decreasing in V (more winning ⇒ more variety) and in S.
+ *  - V≈−0.5 (losing by ½) → m≈0.01 ⇒ T≈0 (sharpen to the best move, max strength).
+ *  - V=0    (even)        → m=0.5 ⇒ S · maxTemp · 0.5 (moderate variety).
+ *  - V≈+0.5 (winning by ½)→ m≈0.99 ⇒ S · maxTemp (full looseness; give the human a chance).
+ * Monotonically increasing in V (more winning ⇒ more variety) and in S, and flat
+ * beyond ±0.5 (fully strong once losing, fully loose once winning).
  */
 export function valueAdaptiveTemperature(
   value: number,
@@ -91,10 +95,10 @@ export function valueAdaptiveTemperature(
   const S = clamp(variety, 0, 1);
   const V = clamp(value, -1, 1);
   if (S <= 0) return 0;
-  // g(V): 0 at V=−1, 1 at V=0, winGain at V=+1; monotonic. Quadratic on the losing
-  // side so strength is maximised (near-deterministic) once clearly behind.
-  const g = V <= 0 ? (1 + V) * (1 + V) : 1 + V * (cfg.winGain - 1);
-  return S * cfg.baseTemp * Math.max(0, g);
+  // m(V)=sigmoid(k·V): 0.5 at V=0, →0 losing, →1 winning; steep (k≈9.2) so it is
+  // essentially saturated by |V|=0.5 (m(±0.5)≈0.01/0.99).
+  const m = 1 / (1 + Math.exp(-cfg.steepness * V));
+  return S * cfg.maxTemp * m;
 }
 
 /**

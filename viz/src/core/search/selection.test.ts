@@ -10,8 +10,14 @@ import {
   selectMoveIndex,
   reasonableSetIndices,
   valueAdaptiveTemperature,
+  DEFAULT_SELECTION_CONFIG,
   type SelectionCandidate,
 } from './selection.ts';
+
+/** The value modulation m(V) ∈ [0,1] recovered from T = S·maxTemp·m(V) at S=1. */
+function moduleM(value: number): number {
+  return valueAdaptiveTemperature(value, 1) / DEFAULT_SELECTION_CONFIG.maxTemp;
+}
 
 /** Mulberry32 — a small deterministic RNG so sampling tests are reproducible. */
 function rng(seed: number): () => number {
@@ -34,10 +40,14 @@ function topShare(cands: SelectionCandidate[], value: number, variety: number, n
 }
 
 describe('valueAdaptiveTemperature', () => {
-  it('is 0 when losing or when variety is 0 (deterministic)', () => {
-    expect(valueAdaptiveTemperature(-1, 1)).toBe(0); // fully losing
+  it('is exactly 0 when variety is 0 (fully deterministic, regardless of V)', () => {
     expect(valueAdaptiveTemperature(0, 0)).toBe(0); // S=0
     expect(valueAdaptiveTemperature(1, 0)).toBe(0); // S=0 even while winning
+    expect(valueAdaptiveTemperature(-1, 0)).toBe(0); // S=0 even while losing
+  });
+
+  it('is effectively 0 (below the deterministic threshold) when fully losing', () => {
+    expect(valueAdaptiveTemperature(-1, 1)).toBeLessThan(1e-3); // sharpen to best move
   });
 
   it('increases monotonically with the value V (losing → winning)', () => {
@@ -50,6 +60,27 @@ describe('valueAdaptiveTemperature', () => {
 
   it('increases monotonically with the variety slider S', () => {
     expect(valueAdaptiveTemperature(0, 0.25)).toBeLessThan(valueAdaptiveTemperature(0, 0.75));
+  });
+
+  // The steep sigmoid m(V)=sigmoid(k·V): essentially saturated by |V|=0.5.
+  describe('value modulation m(V) — steep sigmoid saturated by |V|=0.5', () => {
+    it('m(−0.5) ≲ 0.02 — losing by half ⇒ near-strongest (T≈0)', () => {
+      expect(moduleM(-0.5)).toBeLessThanOrEqual(0.02);
+    });
+
+    it('m(+0.5) ≳ 0.98 — winning by half ⇒ near-loosest (full variety)', () => {
+      expect(moduleM(0.5)).toBeGreaterThanOrEqual(0.98);
+    });
+
+    it('m(0) ≈ 0.5 — moderate variety at an even position', () => {
+      expect(moduleM(0)).toBeCloseTo(0.5, 5);
+    });
+
+    it('is monotonically increasing in V across the full range', () => {
+      const vs = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1];
+      const ms = vs.map(moduleM);
+      for (let i = 1; i < ms.length; i++) expect(ms[i]).toBeGreaterThan(ms[i - 1]);
+    });
   });
 });
 
