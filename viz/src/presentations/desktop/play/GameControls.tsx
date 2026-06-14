@@ -43,11 +43,11 @@ export function GameControls({ store, state, disabled }: GameControlsProps) {
       <label className="control-row pick-toggle">
         <input
           type="checkbox"
-          checked={state.pickMode}
-          onChange={(e) => store.getState().setPickMode(e.target.checked)}
+          checked={state.assist}
+          onChange={(e) => store.getState().setAssist(e.target.checked)}
           disabled={disabled}
         />
-        <span className="control-label">Let me pick the model's move from its top suggestions</span>
+        <span className="control-label">Show move suggestions — the model hints its top moves for your side</span>
       </label>
 
       <div className="control-row temp-row">
@@ -60,7 +60,7 @@ export function GameControls({ store, state, disabled }: GameControlsProps) {
           step={0.05}
           value={state.temperature}
           onChange={(e) => store.getState().setTemperature(parseFloat(e.target.value))}
-          disabled={disabled || state.pickMode || state.mcts.enabled}
+          disabled={disabled || state.mcts.enabled}
           aria-label="Move-selection temperature"
         />
         <span className="temp-val">{state.temperature <= 0 ? 'top move' : `T = ${state.temperature.toFixed(2)}`}</span>
@@ -68,11 +68,9 @@ export function GameControls({ store, state, disabled }: GameControlsProps) {
       <div className="temp-hint">
         {state.mcts.enabled
           ? 'MCTS controls move selection — use the search panel’s exploration temperature.'
-          : state.pickMode
-            ? "You're choosing the model's move, so temperature is ignored."
-            : state.temperature <= 0
-              ? 'Deterministic: the model always plays its single best move.'
-              : 'The model samples among its preferred moves — higher is more adventurous (and a bit weaker).'}
+          : state.temperature <= 0
+            ? 'Deterministic: the model always plays its single best move.'
+            : 'The model samples among its preferred moves — higher is more adventurous (and a bit weaker).'}
       </div>
 
       <div className="control-row">

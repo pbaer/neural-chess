@@ -79,15 +79,17 @@ interface GameViewProps {
 function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
   const thinking = state.status === 'thinking';
-  const choosing = state.status === 'choosing';
-  const boardDisabled = !ready || thinking || choosing || state.status === 'over';
+  const boardDisabled = !ready || thinking || state.status === 'over';
 
-  // Which candidate move (by uci) the user is hovering in the picker — used to
-  // accent the matching arrow on the board. Cleared when not choosing.
+  // Move-assistant suggestions show only on the human's turn (assist on).
+  const showSuggestions = state.turn === state.humanColor && !!state.suggestions;
+
+  // Which suggested move (by uci) the user is hovering in the list — used to
+  // accent the matching arrow on the board. Cleared when no suggestions show.
   const [hoverUci, setHoverUci] = useState<string | null>(null);
   useEffect(() => {
-    if (!choosing) setHoverUci(null);
-  }, [choosing]);
+    if (!showSuggestions) setHoverUci(null);
+  }, [showSuggestions]);
 
   // Which MCTS root move (by uci) the user is hovering in the stats table — used
   // to accent the matching visit-weighted arrow on the board.
@@ -102,7 +104,6 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
     if (!ready) return 'Loading model…';
     if (state.error) return state.error;
     if (state.status === 'over') return state.resultText ?? 'Game over';
-    if (choosing) return 'Pick a move for the model';
     if (thinking) return 'Model is thinking…';
     if (state.turn === state.humanColor) return `Your move (${state.humanColor === 'w' ? 'White' : 'Black'})`;
     return 'Model to move';
@@ -124,8 +125,8 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
           {state.inCheck && state.status !== 'over' && <span className="check-tag"> · check</span>}
         </div>
 
-        {choosing && state.candidates && (
-          <MoveCandidates store={store} candidates={state.candidates} onHover={setHoverUci} />
+        {showSuggestions && state.suggestions && (
+          <MoveCandidates store={store} candidates={state.suggestions} onHover={setHoverUci} />
         )}
 
         <GameControls store={store} state={state} disabled={!ready} />

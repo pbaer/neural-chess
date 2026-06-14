@@ -6,9 +6,15 @@
 // scalar. Attention fields get the board-tied AttentionBoard.
 
 import { useEffect, useMemo, useState } from 'react';
+import { Chess } from 'chess.js';
 import {
+  algToIdx,
+  buildLegalMaskAndMap,
+  legalPolicySoftmax,
+  pieceToMoveProbs,
   traceFieldsFor,
   traceStore,
+  NUM_MOVE_TYPES,
   type Capsule,
   type Color,
   type GraphNode,
@@ -20,7 +26,16 @@ import { colorScaleOf, diverging, niceSeq, rangeOf, rgbCss, sequential } from '.
 import { ContentCard } from '../ContentCard.tsx';
 import { AttentionBoard } from './AttentionBoard.tsx';
 import { Piece } from '../../play/pieces.tsx';
+import { CANDIDATE_ARROW_STYLE, MoveArrows, type ArrowSpec } from '../../play/MoveArrows.tsx';
 import { ScalarInspector, type ScalarView } from '../scalar/ScalarInspector.tsx';
+
+/** How many top policy moves to draw as on-board arrows in the policy-head view. */
+const POLICY_TOP_ARROWS = 6;
+
+/** Engine-frame square (a1=0..h8=63, side to move at bottom) → companion-board cell. */
+function engineSquareToCell(s: number): { r: number; c: number } {
+  return { r: 7 - (s >> 3), c: s & 7 };
+}
 
 const PLANE_NAMES = [
   'own pawns', 'own rooks', 'own knights', 'own bishops', 'own queens', 'own king',
@@ -271,7 +286,7 @@ function FieldView({ node, capsule, sel, meta, onScalar }: FieldViewProps) {
       return <ValueView value={entry.data[0]} onScalar={onScalar} />;
     }
     if (sel.key === 'policy_logits') {
-      return <MatrixView data={entry.data} rows={64} cols={73} label="policy logits" rowKind="square" turn={meta?.turn ?? 'w'} fen={meta?.fen} colName="move-type" onScalar={onScalar} />;
+      return <PolicyHeadView data={entry.data} turn={meta?.turn ?? 'w'} fen={meta?.fen} onScalar={onScalar} />;
     }
     // Conv-style (C × 8 × 8) activation, e.g. the per-square embed: treat each
     // of the 64 squares as a row and its C channels as the columns (board frame).
@@ -347,10 +362,25 @@ interface MatrixViewProps {
   fen?: string;
   /** Bias vector to render aligned with the matrix (length must match a side). */
   bias?: Float32Array | null;
+  /**
+   * Override the companion board's per-square shading (rowKind 'square' only). When
+   * given, the board is colored by THESE 64 values on their OWN color scale (so the
+   * board's contrast is independent of the heatmap's), instead of each square's row
+   * average. Used by the policy head to shade by piece-to-move probability.
+   */
+  squareValues?: Float32Array | null;
+  /** Short name for an overridden square value (e.g. 'P(move this piece)'). */
+  squareValueName?: string;
+  /** Per-square description for an overridden square value. */
+  squareValueDesc?: (s: number) => string;
+  /** Header label over the companion board (defaults to 'avg / square'). */
+  boardHeadLabel?: string;
+  /** Move arrows drawn over the companion board (display cells, 0..8 viewBox). */
+  arrows?: ArrowSpec[];
   onScalar: (v: ScalarView | null) => void;
 }
 
-function MatrixView({ data, rows, cols, label, rowKind, colName, turn = 'w', fen, bias = null, onScalar }: MatrixViewProps) {
+function MatrixView({ data, rows, cols, label, rowKind, colName, turn = 'w', fen, bias = null, squareValues = null, squareValueName, squareValueDesc, boardHeadLabel, arrows, onScalar }: MatrixViewProps) {
   const showBoard = rowKind === 'square';
   const board = useMemo(() => (showBoard && fen ? parseBoard(fen) : null), [showBoard, fen]);
 
@@ -396,23 +426,36 @@ function MatrixView({ data, rows, cols, label, rowKind, colName, turn = 'w', fen
     // to exactly that so the two line up (top-aligned below the arrow gutter).
     const hc = cellPxFor(heatRows, heatCols);
     const gridH = heatRows * hc;
-    const squareScalar = (s: number): ScalarView => ({
-      name: `${label}[${squareLabel(s, turn)}] · avg`,
-      value: avg ? avg[s] : 0,
-      description: `Mean of the ${cols} ${colName}s at square ${squareLabel(s, turn)} (network frame).`,
-    });
+    // The companion board shows either the supplied square values (own scale, for
+    // real contrast) or each square's row-average (shared scale with the heatmap).
+    const boardValues = squareValues ?? avg;
+    const boardScale = squareValues ? colorScaleOf(squareValues) : { mode, range };
+    const squareScalar = (s: number): ScalarView =>
+      squareValues
+        ? {
+            name: `${squareValueName ?? label}[${squareLabel(s, turn)}]`,
+            value: squareValues[s],
+            description: squareValueDesc ? squareValueDesc(s) : `Value at square ${squareLabel(s, turn)} (network frame).`,
+          }
+        : {
+            name: `${label}[${squareLabel(s, turn)}] · avg`,
+            value: avg ? avg[s] : 0,
+            description: `Mean of the ${cols} ${colName}s at square ${squareLabel(s, turn)} (network frame).`,
+          };
     return (
       <div className="matrix-view">
         <div className="matrix-with-board">
-          {avg && (
+          {boardValues && (
             <BoardSquares
-              avg={avg}
+              avg={boardValues}
               board={board}
               turn={turn}
               sizePx={gridH}
               gutter={HEATMAP_GUTTER}
-              mode={mode}
-              range={range}
+              mode={boardScale.mode}
+              range={boardScale.range}
+              headLabel={boardHeadLabel}
+              arrows={arrows}
               highlight={activeSq}
               onHoverSquare={(s) => {
                 setHoverSq(s);
@@ -449,8 +492,11 @@ function MatrixView({ data, rows, cols, label, rowKind, colName, turn = 'w', fen
           </div>
         </div>
         <p className="matrix-caption">
-          Columns = 64 board squares (network frame, side to move at the bottom); rows = {cols} {colName}s. Hover the
-          board or a heatmap cell.
+          {squareValues
+            ? 'Board: P(the model moves the piece on each square) = summed legal, renormalized policy over the 73 move-types from that square (own scale). Arrows = the top predicted moves. '
+            : ''}
+          Heatmap columns = 64 board squares (network frame, side to move at the bottom); rows = {cols} {colName}s. Hover
+          the board or a heatmap cell.
         </p>
       </div>
     );
@@ -537,7 +583,7 @@ function BiasStrip({ bias, axis, cellPx, mode, range, label, onScalar }: {
 //      average on the SAME scale as the heatmap; hovering/selecting drives the
 //      heatmap column arrow (network frame, side to move at the bottom). ----
 
-function BoardSquares({ avg, board, turn, sizePx, gutter, mode, range, highlight, onHoverSquare, onPick }: {
+function BoardSquares({ avg, board, turn, sizePx, gutter, mode, range, highlight, headLabel, arrows, onHoverSquare, onPick }: {
   avg: Float32Array;
   board: (PieceCell | null)[] | null;
   turn: Color;
@@ -548,15 +594,19 @@ function BoardSquares({ avg, board, turn, sizePx, gutter, mode, range, highlight
   mode: 'diverging' | 'sequential';
   range: [number, number];
   highlight: number | null;
+  /** Header label above the board (defaults to 'avg / square'). */
+  headLabel?: string;
+  /** Move arrows to draw over the board (display cells, 0..8 viewBox). */
+  arrows?: ArrowSpec[];
   onHoverSquare: (s: number | null) => void;
   onPick: (s: number) => void;
 }) {
   const rows = [0, 1, 2, 3, 4, 5, 6, 7];
   return (
     <div className="square-grid">
-      <div className="square-grid-head" style={{ height: gutter }}>avg / square</div>
+      <div className="square-grid-head" style={{ height: gutter }}>{headLabel ?? 'avg / square'}</div>
       <div className="square-board" style={{ width: sizePx, height: sizePx }} onMouseLeave={() => onHoverSquare(null)}>
-        <svg viewBox="0 0 8 8" className="square-svg" role="grid" aria-label="Per-square row average">
+        <svg viewBox="0 0 8 8" className="square-svg" role="grid" aria-label={headLabel ?? 'Per-square row average'}>
           {rows.map((dr) =>
             rows.map((f) => {
               const h = 7 - dr; // engine-frame rank (side to move at the bottom)
@@ -569,6 +619,7 @@ function BoardSquares({ avg, board, turn, sizePx, gutter, mode, range, highlight
             }),
           )}
           {board && <BoardGlyphs board={board} turn={turn} />}
+          {arrows && arrows.length > 0 && <MoveArrows arrows={arrows} idPrefix="policy-board" style={CANDIDATE_ARROW_STYLE} />}
         </svg>
         {/* Crisp CSS-bordered outline (even on all sides, never clipped). */}
         {highlight != null && (
@@ -576,6 +627,59 @@ function BoardSquares({ avg, board, turn, sizePx, gutter, mode, range, highlight
         )}
       </div>
     </div>
+  );
+}
+
+// ---- policy head: 64×73 logits heatmap + a piece-to-move board with move arrows ----
+// The companion board is shaded by P(the model moves the piece on each square) —
+// for each FROM-square, the SUM (not average) of the legal-masked, renormalized
+// policy probability over the 73 move-types originating there — on its OWN color
+// scale for real contrast. The top policy moves are drawn as on-board arrows using
+// the SAME renderer as the play board's candidate arrows. Everything is computed in
+// the engine frame (side to move at the bottom), matching the heatmap + board.
+
+function PolicyHeadView({ data, fen, turn, onScalar }: { data: Float32Array; fen?: string; turn: Color; onScalar: (v: ScalarView | null) => void }) {
+  const { pieceToMove, arrows } = useMemo(() => {
+    if (!fen) return { pieceToMove: null as Float32Array | null, arrows: [] as ArrowSpec[] };
+    const chess = new Chess(fen);
+    const { indexToMove } = buildLegalMaskAndMap(chess);
+    const probs = legalPolicySoftmax(data, [...indexToMove.keys()]); // legal-masked, renormalized
+    const pieceToMove = pieceToMoveProbs(probs); // 64, engine frame (SUM per from-square)
+    const ranked = [...probs.entries()].sort((a, b) => b[1] - a[1]).slice(0, POLICY_TOP_ARROWS);
+    const topP = ranked[0]?.[1] || 1;
+    const arrows: ArrowSpec[] = ranked.map(([idx, p]) => {
+      const mv = indexToMove.get(idx)!;
+      const fromEng = Math.floor(idx / NUM_MOVE_TYPES); // == from-square in engine frame
+      const toEng = algToIdx(mv.to) ^ (turn === 'b' ? 56 : 0);
+      return {
+        key: mv.from + mv.to + (mv.promotion ?? ''),
+        from: engineSquareToCell(fromEng),
+        to: engineSquareToCell(toEng),
+        rel: p / topP,
+      };
+    });
+    return { pieceToMove, arrows };
+  }, [data, fen, turn]);
+
+  return (
+    <MatrixView
+      data={data}
+      rows={64}
+      cols={73}
+      label="policy logits"
+      rowKind="square"
+      colName="move-type"
+      turn={turn}
+      fen={fen}
+      squareValues={pieceToMove}
+      squareValueName="P(move this piece)"
+      squareValueDesc={(s) =>
+        `P(the model moves the piece on ${squareLabel(s, turn)}) — the summed legal, renormalized policy probability over the 73 move-types from this square.`
+      }
+      boardHeadLabel="P(move) / sq"
+      arrows={arrows}
+      onScalar={onScalar}
+    />
   );
 }
 

@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react';
 import type { Color, GameState, GameStore, PieceType, PromotionPiece, RootChildStat } from '../../../core/index.ts';
 import { Piece, PieceGlyph } from './pieces.tsx';
+import { CANDIDATE_ARROW_STYLE, MoveArrows, SEARCH_ARROW_STYLE, type ArrowSpec } from './MoveArrows.tsx';
 
 interface Cell {
   color: Color;
@@ -45,10 +46,7 @@ export interface BoardProps {
 
 const LIGHT = '#ebd9b4';
 const DARK = '#9d7b4f';
-const ARROW = '#7ec4ff';
-const ARROW_HOVER = '#ff4d4d';
-const SEARCH_ARROW = '#54d6a0';
-const SEARCH_ARROW_HOVER = '#ffd24d';
+const ARROW_HOVER = '#ff4d4d'; // square-tint accent under a hovered candidate
 /** How many top root moves to draw as arrows (keeps the board readable). */
 const MAX_SEARCH_ARROWS = 8;
 
@@ -75,15 +73,16 @@ export function Board({ store, state, disabled, hoverUci, searchChildren, search
     return orientation === 'w' ? { r: 7 - rank, c: file } : { r: rank, c: 7 - file };
   };
 
-  // Pick-mode candidates drive the picker arrows + hover accent. When MCTS (or
-  // non-MCTS auto-play) has just chosen a move it publishes `flashMove`; we reuse
-  // the EXACT same arrow + square-tint highlight by treating it as a one-element
-  // candidate list that is "hovered" — so the chosen move flashes identically
-  // before it's played. And non-MCTS auto-play first publishes `previewMoves` (its
-  // top policy moves), rendered through the same prob-weighted candidate arrows so
-  // the move distribution shows for a beat before the flash.
-  const pickCandidates = state.status === 'choosing' ? state.candidates : null;
-  const candidates = pickCandidates ?? (state.flashMove ? [state.flashMove] : state.previewMoves);
+  // The blue prob-weighted arrows serve three purposes, in priority order:
+  //  • move-assistant SUGGESTIONS — on the HUMAN's turn (assist mode), the model's
+  //    top moves for the human's own side, drawn as hints (the human still moves).
+  //  • flashMove — after MCTS / auto-play chooses, the picked move flashes (a
+  //    one-element "hovered" list) with the same arrow + square tint before it lands.
+  //  • previewMoves — non-MCTS auto-play first shows its top policy distribution.
+  // Suggestions only appear on the human's turn; flash/preview only on the model's,
+  // so these are mutually exclusive in time.
+  const suggestions = state.turn === state.humanColor ? state.suggestions : null;
+  const candidates = suggestions ?? (state.flashMove ? [state.flashMove] : state.previewMoves);
   const activeHoverUci = state.flashMove ? state.flashMove.uci : hoverUci;
   const hoverCand = candidates && activeHoverUci ? candidates.find((c) => c.uci === activeHoverUci) ?? null : null;
 
@@ -179,130 +178,33 @@ export function Board({ store, state, disabled, hoverUci, searchChildren, search
         )}
 
         {candidates && candidates.length > 0 && (
-          <g className="cand-arrows" pointerEvents="none">
-            <defs>
-              <marker
-                id="cand-arrowhead"
-                viewBox="0 0 10 10"
-                refX={7}
-                refY={5}
-                markerWidth={0.4}
-                markerHeight={0.4}
-                markerUnits="userSpaceOnUse"
-                orient="auto"
-              >
-                <path d="M0,1 L9,5 L0,9 z" fill={ARROW} />
-              </marker>
-              <marker
-                id="cand-arrowhead-hover"
-                viewBox="0 0 10 10"
-                refX={7}
-                refY={5}
-                markerWidth={0.46}
-                markerHeight={0.46}
-                markerUnits="userSpaceOnUse"
-                orient="auto"
-              >
-                <path d="M0,1 L9,5 L0,9 z" fill={ARROW_HOVER} />
-              </marker>
-            </defs>
-            {candidates
-              .slice()
-              // draw the hovered arrow last so it sits on top of the others
-              .sort((a, b) => Number(a.uci === activeHoverUci) - Number(b.uci === activeHoverUci))
-              .map((cand) => {
-              const top = candidates[0].prob || 1;
-              const rel = cand.prob / top; // 1 = best move, smaller = less likely
-              const hovered = cand.uci === activeHoverUci;
-              const from = idxToCell(cand.fromIdx);
-              const to = idxToCell(cand.toIdx);
-              const x1c = from.c + 0.5;
-              const y1c = from.r + 0.5;
-              const x2c = to.c + 0.5;
-              const y2c = to.r + 0.5;
-              const len = Math.hypot(x2c - x1c, y2c - y1c) || 1;
-              const ux = (x2c - x1c) / len;
-              const uy = (y2c - y1c) / len;
-              return (
-                <line
-                  key={cand.uci}
-                  x1={x1c + ux * 0.3}
-                  y1={y1c + uy * 0.3}
-                  x2={x2c - ux * 0.34}
-                  y2={y2c - uy * 0.34}
-                  stroke={hovered ? ARROW_HOVER : ARROW}
-                  strokeWidth={hovered ? 0.16 : 0.05 + 0.09 * rel}
-                  strokeLinecap="round"
-                  opacity={hovered ? 1 : 0.3 + 0.6 * rel}
-                  markerEnd={`url(#cand-arrowhead${hovered ? '-hover' : ''})`}
-                />
-              );
-            })}
-          </g>
+          <MoveArrows
+            className="cand-arrows"
+            idPrefix="cand"
+            style={CANDIDATE_ARROW_STYLE}
+            arrows={candidates.map((cand): ArrowSpec => ({
+              key: cand.uci,
+              from: idxToCell(cand.fromIdx),
+              to: idxToCell(cand.toIdx),
+              rel: cand.prob / (candidates[0].prob || 1), // 1 = best move
+              hovered: cand.uci === activeHoverUci,
+            }))}
+          />
         )}
 
         {searchChildren && searchChildren.length > 0 && (
-          <g className="search-arrows" pointerEvents="none">
-            <defs>
-              <marker
-                id="search-arrowhead"
-                viewBox="0 0 10 10"
-                refX={7}
-                refY={5}
-                markerWidth={0.4}
-                markerHeight={0.4}
-                markerUnits="userSpaceOnUse"
-                orient="auto"
-              >
-                <path d="M0,1 L9,5 L0,9 z" fill={SEARCH_ARROW} />
-              </marker>
-              <marker
-                id="search-arrowhead-hover"
-                viewBox="0 0 10 10"
-                refX={7}
-                refY={5}
-                markerWidth={0.46}
-                markerHeight={0.46}
-                markerUnits="userSpaceOnUse"
-                orient="auto"
-              >
-                <path d="M0,1 L9,5 L0,9 z" fill={SEARCH_ARROW_HOVER} />
-              </marker>
-            </defs>
-            {searchChildren
-              .slice(0, MAX_SEARCH_ARROWS)
-              .slice()
-              // draw the hovered (and most-visited) arrow last → on top
-              .sort((a, b) => Number(a.uci === searchHoverUci) - Number(b.uci === searchHoverUci) || a.n - b.n)
-              .map((c) => {
-                const topN = searchChildren[0].n || 1;
-                const rel = c.n / topN; // 1 = most-visited (the chosen move)
-                const hovered = c.uci === searchHoverUci;
-                const from = idxToCell(c.fromIdx);
-                const to = idxToCell(c.toIdx);
-                const x1c = from.c + 0.5;
-                const y1c = from.r + 0.5;
-                const x2c = to.c + 0.5;
-                const y2c = to.r + 0.5;
-                const len = Math.hypot(x2c - x1c, y2c - y1c) || 1;
-                const ux = (x2c - x1c) / len;
-                const uy = (y2c - y1c) / len;
-                return (
-                  <line
-                    key={c.uci}
-                    x1={x1c + ux * 0.3}
-                    y1={y1c + uy * 0.3}
-                    x2={x2c - ux * 0.34}
-                    y2={y2c - uy * 0.34}
-                    stroke={hovered ? SEARCH_ARROW_HOVER : SEARCH_ARROW}
-                    strokeWidth={hovered ? 0.16 : 0.04 + 0.12 * rel}
-                    strokeLinecap="round"
-                    opacity={hovered ? 1 : 0.28 + 0.6 * rel}
-                    markerEnd={`url(#search-arrowhead${hovered ? '-hover' : ''})`}
-                  />
-                );
-              })}
-          </g>
+          <MoveArrows
+            className="search-arrows"
+            idPrefix="search"
+            style={SEARCH_ARROW_STYLE}
+            arrows={searchChildren.slice(0, MAX_SEARCH_ARROWS).map((c): ArrowSpec => ({
+              key: c.uci,
+              from: idxToCell(c.fromIdx),
+              to: idxToCell(c.toIdx),
+              rel: c.n / (searchChildren[0].n || 1), // 1 = most-visited (chosen)
+              hovered: c.uci === searchHoverUci,
+            }))}
+          />
         )}
       </svg>
 

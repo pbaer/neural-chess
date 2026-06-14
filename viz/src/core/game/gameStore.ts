@@ -23,9 +23,7 @@ import {
 } from './chessAdapter.ts';
 
 export type PromotionPiece = 'q' | 'r' | 'b' | 'n';
-// 'choosing' = pick-mode is on and the model is awaiting the user's pick among
-// its top legal moves (no move applied yet).
-export type GameStatus = 'idle' | 'thinking' | 'choosing' | 'over';
+export type GameStatus = 'idle' | 'thinking' | 'over';
 
 export interface ModelMoveInfo {
   /** UCI string, e.g. "g8f6" (+ promotion letter). */
@@ -39,7 +37,7 @@ export interface ModelMoveInfo {
   policyProb: number;
 }
 
-/** One ranked legal move the model considered (pick-mode candidate list). */
+/** One ranked legal move the model predicts (suggestion / preview / flash list). */
 export interface ModelCandidate {
   from: string; // algebraic, e.g. 'g1'
   to: string;
@@ -52,7 +50,7 @@ export interface ModelCandidate {
   prob: number;
 }
 
-/** How many top legal moves to surface in pick-mode. */
+/** How many top legal moves to surface (move-assistant suggestions / previews). */
 export const TOP_K_CANDIDATES = 5;
 
 /**
@@ -63,12 +61,17 @@ export const TOP_K_CANDIDATES = 5;
 export const DEFAULT_TEMPERATURE = 0.6;
 
 /**
- * Default MCTS ("think harder") settings. Tuned so a search lands within the
- * ≤1–2s per-move budget on the deployed nano model (forward is cheap, so a few
- * hundred sims fit). c_puct 1.5 is the project's tuned value; temperature 0 plays
- * the most-visited (strongest) move.
+ * Default MCTS ("think harder") settings. The search runs a FIXED number of
+ * simulations each move (no wall-clock budget) for predictability — 50 is the
+ * project's best in-budget setting and is cheap on the deployed nano model.
+ * c_puct 1.5 is the project's tuned value; temperature 0 plays the most-visited
+ * (strongest) move.
  */
-export const MCTS_DEFAULTS = { enabled: false, sims: 320, timeMs: 1500, cPuct: 1.5, temperature: 0 } as const;
+export const MCTS_DEFAULTS = { enabled: false, sims: 50, cPuct: 1.5, temperature: 0 } as const;
+
+/** Simulation-count bounds for the MCTS control (fixed sims, no time budget). */
+export const MCTS_MIN_SIMS = 10;
+export const MCTS_MAX_SIMS = 300;
 
 /**
  * How long (ms) to flash the move MCTS just chose — using the same gold/red
@@ -89,10 +92,8 @@ export const AUTOPLAY_PREVIEW_MS = 500;
 /** Live-adjustable MCTS settings. */
 export interface MctsSettings {
   enabled: boolean;
-  /** Simulation budget (hard cap). */
+  /** Number of simulations to run each move (exact; no wall-clock budget). */
   sims: number;
-  /** Wall-clock budget in ms (hard cap; whichever of sims/time hits first wins). */
-  timeMs: number;
   /** PUCT exploration constant. */
   cPuct: number;
   /** Root selection temperature (0 = strongest/most-visited; >0 adds variety). */
@@ -138,12 +139,20 @@ export interface GameState {
   lastMove: { fromIdx: number; toIdx: number } | null;
   /** Details of the model's most recent move (for the value/move readout). */
   lastModelMove: ModelMoveInfo | null;
-  /** When true, the model surfaces its top moves and waits for the user to pick. */
-  pickMode: boolean;
+  /**
+   * Move-assistant toggle. When on, the model is run on the HUMAN's position each
+   * of the human's turns and its top moves for the human's own side are surfaced
+   * (arrows + a candidate list) as hints. The human still makes their own move.
+   */
+  assist: boolean;
   /** Softmax temperature for auto-play move selection (0 = deterministic top move). */
   temperature: number;
-  /** Ranked top-K legal moves awaiting a pick (only set while status==='choosing'). */
-  candidates: ModelCandidate[] | null;
+  /**
+   * Move-assistant suggestions: the model's top-K predicted moves for the HUMAN's
+   * own side at the current position. Set only on the human's turn while `assist`
+   * is on; null otherwise.
+   */
+  suggestions: ModelCandidate[] | null;
   /**
    * The move MCTS just chose, briefly published BEFORE it's applied so the board
    * can flash it with the same highlight as a hovered pick-mode candidate. Null
@@ -167,16 +176,14 @@ export interface GameState {
   newGame(humanColor?: Color): void;
   loadFen(fen: string): boolean;
   undo(): void;
-  /** Toggle pick-mode. Turning it off mid-choice auto-plays the top suggestion. */
-  setPickMode(on: boolean): void;
+  /** Toggle the move assistant. On (the human's turn) → surface move suggestions. */
+  setAssist(on: boolean): void;
   /** Set the auto-play move-selection temperature (clamped ≥ 0). */
   setTemperature(t: number): void;
   /** Toggle MCTS ("think harder"). Off = one-shot argmax (today's behavior). */
   setMctsEnabled(on: boolean): void;
-  /** Patch MCTS settings (sims / timeMs / cPuct / temperature). */
+  /** Patch MCTS settings (sims / cPuct / temperature). */
   setMctsSettings(patch: Partial<MctsSettings>): void;
-  /** Play the i-th candidate (pick-mode). No-op unless status==='choosing'. */
-  chooseModelMove(i: number): void;
   /** Legal destination indices for a piece on `fromIdx` (current side only). */
   legalTargets(fromIdx: number): number[];
 }
@@ -189,12 +196,11 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
   let repCounts = new Map<string, number>();
   let epSquare: number | null = null;
   let lastMove: { fromIdx: number; toIdx: number } | null = null;
-  // Ranked top-K candidates awaiting a pick + the model's value for that position
-  // (pick-mode). Held as closure state and synced into the snapshot via commit().
-  let candidates: ModelCandidate[] | null = null;
-  let pendingValue = 0;
   // Monotonic token to drop stale async model replies after reset/newGame/load.
   let thinkToken = 0;
+  // Separate token for the (human-turn) move-assistant forward, so a stale
+  // suggestion reply is dropped after any position change.
+  let suggestToken = 0;
 
   const repKey = () => chess.fen().split(' ').slice(0, 4).join(' ');
   const recordPosition = () => repCounts.set(repKey(), (repCounts.get(repKey()) ?? 0) + 1);
@@ -227,10 +233,67 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         resultText: sr.resultText,
         inCheck: chess.inCheck(),
         lastMove,
-        candidates,
         error: null,
         ...extra,
       });
+    }
+
+    /** Build the prob-ranked top-K legal moves from a forward reply (for the
+     *  move-assistant suggestion list / arrows). */
+    function rankCandidates(
+      indexToMove: Map<number, ChessMove>,
+      policyProbs: Float32Array,
+    ): ModelCandidate[] {
+      const ranked: ModelCandidate[] = [];
+      for (const [idx, mv] of indexToMove) {
+        ranked.push({
+          from: mv.from,
+          to: mv.to,
+          promotion: mv.promotion as PromotionPiece | undefined,
+          fromIdx: algToIdx(mv.from),
+          toIdx: algToIdx(mv.to),
+          uci: mv.from + mv.to + (mv.promotion ?? ''),
+          san: mv.san,
+          prob: policyProbs[idx] ?? 0,
+        });
+      }
+      ranked.sort((a, b) => b.prob - a.prob);
+      return ranked;
+    }
+
+    /**
+     * Move assistant: on the HUMAN's turn (assist on), run the model on the current
+     * position and publish its top moves for the human's own side as suggestions.
+     * A single forward pass — the model only ranks chess.js's legal moves; the human
+     * still makes their own move. Token-guarded so a stale reply is dropped.
+     */
+    async function computeSuggestions(): Promise<void> {
+      if (!get().assist) return;
+      if (chess.isGameOver() || chess.turn() !== get().humanColor) return;
+      const token = ++suggestToken;
+      const planes = featurize(boardState(), 'float');
+      const { mask, indexToMove } = buildLegalMaskAndMap(chess);
+      let reply;
+      try {
+        reply = await engine.forward(planes, mask, false);
+      } catch {
+        return; // suggestions are advisory; swallow failures silently
+      }
+      // Drop if superseded, or if it's no longer the human's turn / assist was off.
+      if (token !== suggestToken || !get().assist) return;
+      if (chess.isGameOver() || chess.turn() !== get().humanColor) return;
+      const ranked = rankCandidates(indexToMove, reply.policyProbs);
+      set({ suggestions: ranked.length > 0 ? ranked.slice(0, TOP_K_CANDIDATES) : null });
+    }
+
+    /** Recompute suggestions if it's the human's turn (assist on), else clear them. */
+    function refreshSuggestions(): void {
+      if (get().assist && !chess.isGameOver() && chess.turn() === get().humanColor) {
+        void computeSuggestions();
+      } else if (get().suggestions) {
+        suggestToken++;
+        set({ suggestions: null });
+      }
     }
 
     /** Apply a fully-specified model move and publish its readout. */
@@ -247,14 +310,16 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         value,
         policyProb: prob,
       };
-      candidates = null;
       commit({ lastModelMove: info, flashMove: null, previewMoves: null });
+      // Back to the human → surface move-assistant suggestions if enabled.
+      refreshSuggestions();
     }
 
     async function runModel(): Promise<void> {
       const token = ++thinkToken;
-      candidates = null;
-      set({ status: 'thinking', candidates: null, search: null, flashMove: null, previewMoves: null });
+      // Model's turn → drop any human-turn suggestions.
+      suggestToken++;
+      set({ status: 'thinking', suggestions: null, search: null, flashMove: null, previewMoves: null });
 
       // MCTS ("think harder") path: search off the main thread, visualize live,
       // then play the most-visited root move. Uses ONLY the model's P/V.
@@ -264,7 +329,6 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         for (const [k, v] of repCounts) repCountsObj[k] = v;
         const opts: SearchOptions = {
           sims: m.sims,
-          timeMs: m.timeMs,
           cPuct: m.cPuct,
           temperature: m.temperature,
           repCounts: repCountsObj,
@@ -322,32 +386,6 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       }
       if (token !== thinkToken) return; // superseded by reset/newGame/load
 
-      if (get().pickMode) {
-        // Surface the top-K legal moves (ranked by policy prob) and wait for a pick.
-        const ranked: ModelCandidate[] = [];
-        for (const [idx, mv] of indexToMove) {
-          ranked.push({
-            from: mv.from,
-            to: mv.to,
-            promotion: mv.promotion as PromotionPiece | undefined,
-            fromIdx: algToIdx(mv.from),
-            toIdx: algToIdx(mv.to),
-            uci: mv.from + mv.to + (mv.promotion ?? ''),
-            san: mv.san,
-            prob: reply.policyProbs[idx] ?? 0,
-          });
-        }
-        ranked.sort((a, b) => b.prob - a.prob);
-        if (ranked.length === 0) {
-          commit({ error: 'Model produced no legal move.' });
-          return;
-        }
-        candidates = ranked.slice(0, TOP_K_CANDIDATES);
-        pendingValue = reply.value;
-        commit({ status: 'choosing' });
-        return;
-      }
-
       // Auto-play: sample among the legal moves under the current temperature
       // (T=0 reproduces the original argmax-over-legal behavior exactly).
       const legalIndices = [...indexToMove.keys()];
@@ -360,23 +398,10 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
 
       // Present the single forward pass like "MCTS with one simulation":
       //   1) surface the top-K policy moves as prob-weighted arrows (the move
-      //      distribution), 2) flash the selected move with the pick-mode
-      //      gold/red highlight, then 3) play it. Each beat is token-guarded so a
-      //      New Game / Load FEN / undo during it cancels cleanly.
-      const ranked: ModelCandidate[] = [];
-      for (const [idx, m] of indexToMove) {
-        ranked.push({
-          from: m.from,
-          to: m.to,
-          promotion: m.promotion as PromotionPiece | undefined,
-          fromIdx: algToIdx(m.from),
-          toIdx: algToIdx(m.to),
-          uci: m.from + m.to + (m.promotion ?? ''),
-          san: m.san,
-          prob: reply.policyProbs[idx] ?? 0,
-        });
-      }
-      ranked.sort((a, b) => b.prob - a.prob);
+      //      distribution), 2) flash the selected move with the gold/red highlight,
+      //      then 3) play it. Each beat is token-guarded so a New Game / Load FEN /
+      //      undo during it cancels cleanly.
+      const ranked = rankCandidates(indexToMove, reply.policyProbs);
 
       // 1) Show the top moves' distribution.
       set({ previewMoves: ranked.slice(0, TOP_K_CANDIDATES) });
@@ -415,10 +440,11 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       repCounts = new Map();
       epSquare = fen ? epTargetFromFen(fen) : null;
       lastMove = null;
-      candidates = null;
+      suggestToken++; // drop any pending suggestion reply
       recordPosition();
-      commit({ humanColor, lastModelMove: null, search: null, flashMove: null, previewMoves: null });
+      commit({ humanColor, lastModelMove: null, suggestions: null, search: null, flashMove: null, previewMoves: null });
       if (!chess.isGameOver() && chess.turn() !== humanColor) void runModel();
+      else refreshSuggestions(); // human to move → assistant suggestions if enabled
     }
 
     // ---- initial state ----
@@ -434,9 +460,9 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       inCheck: chess.inCheck(),
       lastMove: null,
       lastModelMove: null,
-      pickMode: false,
+      assist: false,
       temperature: DEFAULT_TEMPERATURE,
-      candidates: null,
+      suggestions: null,
       flashMove: null,
       previewMoves: null,
       mcts: { ...MCTS_DEFAULTS },
@@ -455,8 +481,9 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         }
         epSquare = epTargetAfterMove(applied);
         lastMove = { fromIdx, toIdx };
+        suggestToken++; // the human moved → drop their suggestions
         recordPosition();
-        commit();
+        commit({ suggestions: null });
         if (!chess.isGameOver() && chess.turn() !== s.humanColor) void runModel();
         return true;
       },
@@ -465,10 +492,9 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         startGame(humanColor ?? get().humanColor);
       },
 
-      setPickMode(on) {
-        set({ pickMode: on });
-        // Turning auto-play back on while waiting on a pick resolves to the top move.
-        if (!on && get().status === 'choosing') get().chooseModelMove(0);
+      setAssist(on) {
+        set({ assist: on });
+        refreshSuggestions(); // compute on the human's turn, else clear
       },
 
       setTemperature(t) {
@@ -482,19 +508,13 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       setMctsSettings(patch) {
         const cur = get().mcts;
         const next: MctsSettings = { ...cur };
-        if (patch.sims !== undefined && Number.isFinite(patch.sims)) next.sims = Math.max(1, Math.round(patch.sims));
-        if (patch.timeMs !== undefined && Number.isFinite(patch.timeMs)) next.timeMs = Math.max(100, Math.round(patch.timeMs));
+        if (patch.sims !== undefined && Number.isFinite(patch.sims)) {
+          next.sims = Math.min(MCTS_MAX_SIMS, Math.max(MCTS_MIN_SIMS, Math.round(patch.sims)));
+        }
         if (patch.cPuct !== undefined && Number.isFinite(patch.cPuct)) next.cPuct = Math.max(0, patch.cPuct);
         if (patch.temperature !== undefined && Number.isFinite(patch.temperature)) next.temperature = Math.max(0, patch.temperature);
         if (patch.enabled !== undefined) next.enabled = patch.enabled;
         set({ mcts: next });
-      },
-
-      chooseModelMove(i) {
-        if (get().status !== 'choosing' || !candidates) return;
-        const cand = candidates[i];
-        if (!cand) return;
-        applyModelMove({ from: cand.from, to: cand.to, promotion: cand.promotion }, pendingValue, cand.prob);
       },
 
       loadFen(fen) {
@@ -525,8 +545,9 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         const last = hist[hist.length - 1];
         epSquare = last ? epTargetAfterMove(last) : null;
         lastMove = last ? { fromIdx: algToIdx(last.from), toIdx: algToIdx(last.to) } : null;
-        candidates = null;
-        commit({ lastModelMove: null, search: null, flashMove: null, previewMoves: null });
+        suggestToken++;
+        commit({ lastModelMove: null, suggestions: null, search: null, flashMove: null, previewMoves: null });
+        refreshSuggestions(); // back on the human's turn → suggestions if enabled
       },
 
       legalTargets(fromIdx) {

@@ -15,6 +15,8 @@ export {
   encodeMove,
   decodeMove,
   legalMask,
+  legalPolicySoftmax,
+  pieceToMoveProbs,
   rotateSquare,
   NUM_MOVES,
   NUM_MOVE_TYPES,
@@ -43,7 +45,7 @@ export { createWorkerEngineClient } from './game/engineClient.ts';
 export type { EngineClient, EngineMeta, ForwardReply } from './game/engineClient.ts';
 
 // Game + play loop.
-export { createGameStore, MCTS_DEFAULTS } from './game/gameStore.ts';
+export { createGameStore, MCTS_DEFAULTS, MCTS_MIN_SIMS, MCTS_MAX_SIMS } from './game/gameStore.ts';
 export type { GameStore, GameState, GameStatus, ModelMoveInfo, ModelCandidate, PromotionPiece, MctsSettings } from './game/gameStore.ts';
 export {
   algToIdx,

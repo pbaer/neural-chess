@@ -119,7 +119,7 @@ describe('MCTS with the real engine (integration + profiling)', () => {
     const fen = new Chess().fen();
 
     const t0 = performance.now();
-    const result = await runSearch(fen, evalr, { sims: 300, timeMs: 5000, cPuct: 1.5, temperature: 0, seed: 1 });
+    const result = await runSearch(fen, evalr, { sims: 300, cPuct: 1.5, temperature: 0, seed: 1 });
     const dt = performance.now() - t0;
 
     expect(result.move).not.toBeNull();

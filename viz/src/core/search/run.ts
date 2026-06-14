@@ -1,6 +1,7 @@
-// Search driver — runs the stepwise MCTS to completion under a sims + wall-clock
-// budget, emitting throttled progress snapshots and cooperatively yielding so the
-// host (the inference worker) stays responsive and can be cancelled.
+// Search driver — runs the stepwise MCTS for exactly the configured number of
+// simulations, emitting throttled progress snapshots and cooperatively yielding so
+// the host (the inference worker) stays responsive and can be cancelled. There is
+// no wall-clock budget: the sim count alone governs the search, for predictability.
 //
 // Presentation-agnostic: time source, yield, progress, and cancel are injected.
 
@@ -55,14 +56,12 @@ export async function runSearch(
   let lastEmit = start;
   let lastYield = start;
   const sims = Math.max(1, options.sims | 0);
-  const timeMs = Math.max(1, options.timeMs | 0);
 
   // No legal moves (shouldn't happen — caller gates on game-over) → bail.
   if (mcts.root.children && mcts.root.children.size > 0) {
     for (let i = 0; i < sims; i++) {
       mcts.simulate();
       const t = now();
-      if (t - start >= timeMs) break;
       if (hooks.shouldCancel?.()) break;
       if (hooks.onProgress && t - lastEmit >= EMIT_MS) {
         hooks.onProgress(mcts.snapshot(sims, t - start, true));

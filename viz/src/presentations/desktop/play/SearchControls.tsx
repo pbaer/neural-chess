@@ -1,9 +1,10 @@
 // SearchControls — the MCTS ("think harder") on/off toggle + live-adjustable
-// search settings (simulation budget, time budget, c_puct, root exploration
-// temperature). Off by default: when off, the model plays its one-shot argmax
+// search settings (simulation count, c_puct, root exploration temperature). The
+// search runs a FIXED number of simulations each move (no wall-clock budget), for
+// predictability. Off by default: when off, the model plays its one-shot argmax
 // move exactly as before. Changing a setting takes effect on the next move.
 
-import type { GameState, GameStore } from '../../../core/index.ts';
+import { MCTS_MAX_SIMS, MCTS_MIN_SIMS, type GameState, type GameStore } from '../../../core/index.ts';
 
 export interface SearchControlsProps {
   store: GameStore;
@@ -31,35 +32,21 @@ export function SearchControls({ store, state, disabled }: SearchControlsProps) 
         <div className="mcts-settings">
           <div className="mcts-hint">
             AlphaZero-style PUCT search. Uses <em>only</em> the model's move priors (P) and position value (V) — no
-            chess heuristics. Stops at whichever budget (sims or time) is hit first.
+            chess heuristics. Runs exactly the configured number of simulations each move (no time limit).
           </div>
 
           <label className="mcts-slider-row">
             <span className="mcts-slider-label">Simulations</span>
             <input
               type="range"
-              min={32}
-              max={800}
-              step={16}
+              min={MCTS_MIN_SIMS}
+              max={MCTS_MAX_SIMS}
+              step={10}
               value={m.sims}
               onChange={(e) => store.getState().setMctsSettings({ sims: parseInt(e.target.value, 10) })}
               disabled={disabled}
             />
             <span className="mcts-slider-val">{m.sims}</span>
-          </label>
-
-          <label className="mcts-slider-row">
-            <span className="mcts-slider-label">Time budget</span>
-            <input
-              type="range"
-              min={250}
-              max={3000}
-              step={250}
-              value={m.timeMs}
-              onChange={(e) => store.getState().setMctsSettings({ timeMs: parseInt(e.target.value, 10) })}
-              disabled={disabled}
-            />
-            <span className="mcts-slider-val">{(m.timeMs / 1000).toFixed(2)}s</span>
           </label>
 
           <label className="mcts-slider-row">

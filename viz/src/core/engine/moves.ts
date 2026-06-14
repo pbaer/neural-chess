@@ -168,6 +168,42 @@ export function legalMask(legalMoves: Move[]): Uint8Array {
   return mask;
 }
 
+/**
+ * Softmax over ONLY the legal flat indices → Map(flatIdx → probability), summing
+ * to 1. Mathematically identical to a full-domain softmax then mask+renormalize
+ * over the legal set (the engine's policyProbs), but computed straight from the
+ * legal indices so it can be derived from just the logits + a legal-move list.
+ */
+export function legalPolicySoftmax(logits: ArrayLike<number>, legalIndices: number[]): Map<number, number> {
+  const out = new Map<number, number>();
+  if (legalIndices.length === 0) return out;
+  let max = -Infinity;
+  for (const i of legalIndices) if (logits[i] > max) max = logits[i];
+  const weights: number[] = [];
+  let total = 0;
+  for (const i of legalIndices) {
+    const e = Math.exp(logits[i] - max);
+    weights.push(e);
+    total += e;
+  }
+  total = total || 1;
+  legalIndices.forEach((i, k) => out.set(i, weights[k] / total));
+  return out;
+}
+
+/**
+ * P(the model moves the piece on each FROM-square) — for each from-square, the
+ * SUM of the legal-masked, renormalized policy probability over the 73 move-types
+ * originating from that square. Returns a 64-array indexed by from-square
+ * (a1=0 .. h8=63), in whatever frame the supplied indices are in (engine frame
+ * for the policy head). SUM, not average: a square's total move probability.
+ */
+export function pieceToMoveProbs(probsByIndex: Map<number, number>): Float32Array {
+  const out = new Float32Array(64);
+  for (const [idx, p] of probsByIndex) out[Math.floor(idx / NUM_MOVE_TYPES)] += p;
+  return out;
+}
+
 /** Vertical-mirror a square (flip rank, keep file): chess.square_mirror. */
 export function rotateSquare(sq: number): number {
   return sq ^ 56;

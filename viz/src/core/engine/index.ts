@@ -139,7 +139,16 @@ export { Capsule, fetchCapsule, loadCapsuleFromBytes } from './capsule.ts';
 export type { CapsuleManifest, CapsuleConfig, GraphStage, TensorIndexEntry } from './capsule.ts';
 export { featurize, applyInt8Truncation, NUM_PLANES } from './featurize.ts';
 export type { FeaturizeMode } from './featurize.ts';
-export { encodeMove, decodeMove, legalMask, rotateSquare, NUM_MOVES, NUM_MOVE_TYPES } from './moves.ts';
+export {
+  encodeMove,
+  decodeMove,
+  legalMask,
+  legalPolicySoftmax,
+  pieceToMoveProbs,
+  rotateSquare,
+  NUM_MOVES,
+  NUM_MOVE_TYPES,
+} from './moves.ts';
 export type { Move } from './moves.ts';
 export type { BoardState, PieceInfo, Color, PieceType } from './boardState.ts';
 export { TraceRecorder } from './trace.ts';

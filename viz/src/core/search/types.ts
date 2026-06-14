@@ -55,10 +55,8 @@ export interface SearchSnapshot {
 
 /** Configuration for a single search. */
 export interface SearchOptions {
-  /** Hard cap on simulations. */
+  /** Number of simulations to run (the search runs exactly this many each move). */
   sims: number;
-  /** Hard wall-clock cap, ms (whichever of sims/time hits first ends the search). */
-  timeMs: number;
   /** PUCT exploration constant (project default 1.5). */
   cPuct: number;
   /** Final-move selection temperature (0 = most-visited; >0 samples by N^(1/T)). */
