@@ -46,7 +46,7 @@ export interface BoardProps {
 
 const LIGHT = '#ebd9b4';
 const DARK = '#9d7b4f';
-const ARROW_HOVER = '#ff4d4d'; // square-tint accent under a hovered candidate
+const ARROW_HOVER = '#2ecc71'; // square-tint accent under a hovered/selected candidate (green = "this is the move")
 /** How many top root moves to draw as arrows (keeps the board readable). */
 const MAX_SEARCH_ARROWS = 8;
 

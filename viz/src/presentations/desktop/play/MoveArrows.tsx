@@ -34,7 +34,7 @@ export interface MoveArrowStyle {
 
 export const CANDIDATE_ARROW_STYLE: MoveArrowStyle = {
   color: '#7ec4ff',
-  hoverColor: '#ff4d4d',
+  hoverColor: '#2ecc71',
   baseWidth: 0.05,
   relWidth: 0.09,
   hoverWidth: 0.16,
