@@ -212,17 +212,25 @@ A line of tiny "teaching" models (small enough that **every weight/activation is
 
 `src/v3/pack_agg.py` + `src/v3/train_agg_fast.py` are a **~13–25× faster** path for the tau recipe. 20 of the 21 input planes are binary after int8 truncation, so the ~92 GB `agg_100M` corpus bit-packs to a RAM-resident **~26 GB** form (`data/v2/agg_100M_packed/`, round-trip bit-exact) that loads fully into memory, and the GPU bit-unpacks each batch — eliminating the disk-I/O bottleneck that capped `train_agg.py` at ~2k samp/s. Exposes the v3.1/v3.2 knobs `--stem-kernel --stem-blocks --ffn-mult --value-hidden --no-geometry-bias --no-pos-emb --share-blocks`. Used for every teaching model; the recommended trainer for the next big model.
 
+## Distillation — the browser hero
+
+The 116k v3.1 net is **capacity-saturated on human labels** (train ≈ val, plateaued) — at that size it cannot get stronger from more human-move supervision. **Knowledge distillation** pushes it past that ceiling: the strong **`v3-37M` teacher** (itself trained only on human games) labels every position in the tau corpus with its full soft policy (top-32 logits) and value (`src/v3/teacher_label.py`), and a fresh 116k student is trained to match that richer distribution (the `--distill-dir / --distill-alpha / --distill-temp` flags in `train_agg_fast.py`). Pure-teacher (`α=1.0, T=2`) wins; mixing the human labels back in *hurt*.
+
+The result, **`D-a10-t2`**, is **policy-indistinguishable** from the human-trained `v3.1-eq` in raw play (head-to-head ≈ 0.50 over 1,000 games) but has a **better value head** — invisible in one-shot play, yet **decisive under MCTS**: 0.72 with **zero losses over 240 games** at 50 sims, and a higher Stockfish-magnus win rate (8%→30% as sims go 100→200). The web tool ships `D-a10-t2` precisely because its "think harder" (MCTS) mode is what the stronger value head exploits.
+
+> **Principle note:** distillation is the one place a *model* — not raw human games — supplies the training signal. The teacher is human-games-only (no engine, no self-play), so no external chess knowledge enters; this is an explicit, user-granted carve-out for the **browser serving model only**, kept off the main GPU-model line. Documented in `memory/browser-distill-mcts.md`.
+
 ## Neural Chess web tool (`viz/`)
 
-A public, static, **educational** browser app (React + Vite + TypeScript) that runs a **hand-written TypeScript forward pass** (no ONNX; PyTorch-parity-verified, identical argmax) of the 116k v3.1 hero and lets you:
-- **play** it — one-shot inference per move, with a value-head readout and an optional top-5 move picker, and
-- **inspect** it — a "Model Inspector" telescope from the architecture diagram down to individual attention weights tied to the 64 board squares, with contextual explanations.
+A public, static, **educational** browser app (React + Vite + TypeScript) that runs a **hand-written TypeScript forward pass** (no ONNX; PyTorch-parity-verified, identical argmax) of the tiny 116k v3.1 hero and lets you:
+- **play** it — either **one-shot** (a single forward pass per move) or with an optional **in-browser PUCT MCTS** ("think harder", default 100 sims with early cutoff on clear positions, configurable up to 300), a value-head readout, and a **move-assistant** that surfaces the model's top suggestions from *your* side. Move variety is **value-adaptive** (a sigmoid of the value head): the model sharpens toward its best move when it judges itself losing and relaxes — more variety, mild novelty — when comfortable, while never playing a move a strong player would avoid. This keeps it fun across opponent strengths.
+- **inspect** it — a "Model Inspector" telescope from the architecture diagram down to individual attention weights tied to the 64 board squares, with contextual explanations, plus a policy-head view (top-N move arrows + piece-to-move board shading).
 
-It is **architecture-version-neutral**: instead of a `.pt` it loads a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` graph + `weights.bin` + `config.json`), so it renders whatever architecture the capsule declares. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
+The browser hero is **`D-a10-t2`** — the [distilled](#distillation--the-browser-hero) 116k net above. It is **architecture-version-neutral**: instead of a `.pt` it loads a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` graph + `weights.bin` + `config.json`), so it renders whatever architecture the capsule declares. Chess piece graphics are the *cburnett* set (BSD; see `viz/THIRD_PARTY.md`), and a footer carries the license + attribution + repo link. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
 
 ## Roadmap — next big model
 
-The next big-model run stacks the three validated levers: **`v3.1-37M-tau`** = the v3.1 (no-conv) architecture + the tau data recipe + ~37M capacity (matching the current best raw model `v3-37M`, so the comparison isolates the gain). Train with `train_agg_fast.py` in BF16, ~10–16 epochs, `--save-every-steps`; eval on the full SF ladder + h2h vs v3-37M; projected ≈ +79 Elo from tau alone. **Caveat:** no-conv is validated only at ~116k, so an 18M conv-vs-no-conv A/B is cheap insurance before committing the full run. Also pending: ship the already-trained `v3-18M-tau` as the efficient model. Full plan + risks (incl. the degraded training box, RMA pending): `memory/future-architecture-roadmap.md`.
+With v2 (scale), v3 (attention), the tau data recipe, the v3.1 lean architecture, distillation, and the web tool all done, **one major lever remains: a full-size v3.1 model.** **`v3.1-37M-tau`** stacks the three validated levers — the v3.1 (no-conv) architecture + the tau data recipe + ~37M capacity (matching the current best raw model `v3-37M`, so the comparison isolates the gain) — for the **strongest possible model** (GPU-only; far too large to run in the browser). Train with `train_agg_fast.py` in BF16, ~10–16 epochs, `--save-every-steps`; eval on the full SF ladder + h2h vs v3-37M; projected ≈ +79 Elo from tau alone. **Caveat:** no-conv is validated only at ~116k, so an 18M conv-vs-no-conv A/B is cheap insurance before committing the full run. The web tool is otherwise feature-complete — only small viz tweaks are expected going forward. Full plan + risks (incl. the degraded training box, RMA pending): `memory/future-architecture-roadmap.md`.
 
 ## Setup
 
@@ -628,7 +636,8 @@ neural-chess/
 │       ├── filtered/        # tier_top/mid/low.pgn after filter step
 │       ├── training_T1_rot*/        # featurized shards (8M / 40M / 100M) for v2/v3
 │       ├── agg_100M/        # position-aggregated "tau" corpus (avg value + move histogram + count)
-│       └── agg_100M_packed/ # bit-packed RAM-resident "tau" corpus (~25 GB; ~26 GB resident) for train_agg_fast.py
+│       ├── agg_100M_packed/ # bit-packed RAM-resident "tau" corpus (~25 GB; ~26 GB resident) for train_agg_fast.py
+│       └── agg_100M_teacher/ # v3-37M teacher targets (top-32 policy + value) for distillation
 ├── model/                   # gitignored — checkpoints per version
 │   ├── v1/checkpoints/
 │   ├── v2/v2-{2..37}M*/     # the v2 CNN scale ladder; v2-37M (20×320, 100M data) is best v2
@@ -637,7 +646,8 @@ neural-chess/
 │       ├── v3.2/            # v3.2 ablation runs (R1..R8 — all confirmed v3.1 is tight)
 │       ├── truemin/         # true-minimum scale pass (smallest v3.1 beating sf_easy = d24/b8 ~70.6k)
 │       ├── v3-micro-tau/, v3-nano-tau/   # teaching models (conv-stem era)
-│       └── v3.1-nano/       # exported-hero checkpoint (= v3.1-eq) backing the web-tool capsule
+│       ├── distill/         # distilled 116k students (D-a10-t2 = browser hero) from the v3-37M teacher
+│       └── v3.1-nano/       # exported-hero checkpoint (= D-a10-t2, distilled) backing the web-tool capsule
 ├── src/
 │   ├── inference_api.py     # PolicyEngine abstract base + load_policy_engine factory (arch auto-detect)
 │   ├── engine.py            # Stockfish/UCI helpers
@@ -655,16 +665,17 @@ neural-chess/
 │   │   └── test_dataset_hardening.py
 │   └── v3/
 │       ├── model.py / inference.py     # attention tower (+ v3.1/v3.2 toggles) + V3PolicyEngine
-│       ├── aggregate.py     # build the position-aggregated "tau" corpus
+│       ├── aggregate.py     # build the position-aggregated "tau" corpus (+ --min-elo filter)
 │       ├── train_agg.py     # train on the tau corpus (avg value + soft policy + count^τ)
 │       ├── pack_agg.py      # bit-pack agg_100M → agg_100M_packed (~92 GB → ~26 GB, RAM-resident)
-│       └── train_agg_fast.py  # fast in-RAM bit-packed tau trainer (~13–25×; v3.1/v3.2 flags)
+│       ├── teacher_label.py # precompute v3-37M teacher targets (top-32 policy + value) for distillation
+│       └── train_agg_fast.py  # fast in-RAM bit-packed tau trainer (~13–25×; v3.1/v3.2 + distill flags)
 ├── eval/
 │   ├── v1/                  # evaluate.py, eval_one.py, opening/castling/temp analyses
 │   ├── v2/                  # eval_v2.py, mcts_sweep.py, vs_random.py, analyze_v2.py, startpos_value.py, mcts_vs_ultra_timed.py
 │   └── v3/                  # bakeoff_h2h.py, agg_sweep/report/h2h/h2h_mcts.py, bench_v3_18M_tau.py
-│                            #   teaching/ablation orchestrators: run_micro_campaign, run_nano_search,
-│                            #   run_v3_1_ablation, run_v3_2_explore, run_v3_2_batch2, run_v3_truemin
+│                            #   teaching/ablation/distill orchestrators: run_micro_campaign, run_nano_search,
+│                            #   run_v3_1_ablation, run_v3_2_explore, run_v3_2_batch2, run_v3_truemin, run_distill
 │                            #   + teaching_models_report.md
 ├── viz/                     # Neural Chess web tool (React + Vite + TS) — see viz/README.md
 │   ├── src/core/            # presentation-agnostic: engine + trace + model-graph + content + game
@@ -683,4 +694,5 @@ neural-chess/
 - **Chess piece graphics** (web tool): the *cburnett* set by Colin M.L. Burnett, used under BSD — see `viz/THIRD_PARTY.md`.
 - **v1 training data**: derived from open historical PGNs (TWIC + Lichess) — derived NPZ shards may be redistributed.
 - **v2 training data**: mixed sources. Lichess content is CC0; **TWIC content is "personal use only" and the filtered tier PGNs / shards derived from it must NOT be redistributed wholesale.** Trained weights derived from this mix are personal-use only.
-- **No engine-derived training signal** (Stockfish evaluations, MCTS rollouts, etc.) is used anywhere in either version, per the project principles.
+- **Browser weights**: the web-tool hero (`D-a10-t2`) is **distilled** from our own human-trained `v3-37M` teacher — no engine signal at any point; see [Distillation](#distillation--the-browser-hero).
+- **No engine-derived training signal** (Stockfish evaluations, MCTS rollouts, etc.) is used anywhere in any version, per the project principles.
