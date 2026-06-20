@@ -1254,6 +1254,36 @@ body {
   }
 }
 
+/* ---- Mobile: keep the Model Inspector's fixed-px renders inside their cards ----
+   The heatmap <canvas> elements and the companion/plane board grids are sized in
+   inline px (the 64×73 matrices reach ~360px wide), which spills past the narrow
+   .field-view card on a phone (and is then clipped by .insp-section's overflow).
+   These rules only engage when the container is actually narrower than the render
+   (max-width:100% caps width; height:auto preserves the intrinsic aspect ratio),
+   so at desktop widths they are no-ops — the inspector looks identical. Scoped to
+   the single-column breakpoint to be doubly sure desktop is untouched. */
+@media (max-width: 880px) {
+  /* Heatmap canvases: cap width, let height follow the bitmap's aspect ratio.
+     The !important beats the inline height set in Heatmap.tsx. */
+  .field-view canvas {
+    max-width: 100%;
+    height: auto !important;
+  }
+  /* Square companion board + input-plane board are inline-px squares; shrink to
+     fit while staying square (overrides the inline width/height). */
+  .field-view .square-board,
+  .field-view .plane-board {
+    max-width: 100%;
+    height: auto !important;
+    aspect-ratio: 1 / 1;
+  }
+  /* If the weight matrix takes the full width, let its aligned bias strip wrap
+     below instead of pushing past the card. */
+  .field-view .weight-bias-row {
+    flex-wrap: wrap;
+  }
+}
+
 /* ---- Model Configuration block (mode toggle + per-mode params) ---- */
 .model-config {
   display: flex;
