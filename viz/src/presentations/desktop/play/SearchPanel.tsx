@@ -57,7 +57,7 @@ export function SearchPanel({ search, thinking, modelColor, onHover, hoverUci }:
       </div>
 
       {pv.length > 0 && (
-        <div className="search-pv" title="Principal variation — the move sequence the search currently thinks is best for both sides.">
+        <div className="search-pv" title="Principal variation: the move sequence the search currently thinks is best for both sides.">
           <span className="search-pv-label">Best line</span>
           <span className="search-pv-line">{pv.map((m) => m.san).join(' ')}</span>
         </div>
@@ -67,11 +67,11 @@ export function SearchPanel({ search, thinking, modelColor, onHover, hoverUci }:
         <thead>
           <tr>
             <th className="st-move">move</th>
-            <th className="st-n" title="N — how many what-if trials explored this move">N</th>
+            <th className="st-n" title="N: how many what-if trials explored this move">N</th>
             <th className="st-bar" />
-            <th className="st-q" title="Q — how those trials turned out, mover’s side (+1 best … −1 worst)">Q</th>
-            <th className="st-p" title="P — the model’s first-glance probability for this move">P</th>
-            <th className="st-puct" title="PUCT selection score = Q + c·P·√ΣN/(1+N) — balances exploit (Q) vs. explore (P, low N)">PUCT</th>
+            <th className="st-q" title="Q: how those trials turned out, mover’s side (+1 best … −1 worst)">Q</th>
+            <th className="st-p" title="P: the model’s first-glance probability for this move">P</th>
+            <th className="st-puct" title="PUCT: selection score Q + c·P·√ΣN/(1+N), balancing exploit (Q) vs. explore (P, low N)">PUCT</th>
           </tr>
         </thead>
         <tbody onMouseLeave={() => onHover?.(null)}>

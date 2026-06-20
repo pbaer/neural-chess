@@ -297,7 +297,7 @@ function FieldView({ node, capsule, sel, meta, onScalar }: FieldViewProps) {
     if (entry.shape.length === 2) {
       return <MatrixView data={entry.data} rows={entry.shape[0]} cols={entry.shape[1]} label={sel.label} rowKind="square" turn={meta?.turn ?? 'w'} fen={meta?.fen} colName="feature" onScalar={onScalar} />;
     }
-    return <div className="scalar-empty">Shape {entry.shape.join('×')} — no viewer.</div>;
+    return <div className="scalar-empty">Shape {entry.shape.join('×')}: no viewer.</div>;
   }
 
   // Weight field.
@@ -322,7 +322,7 @@ function FieldView({ node, capsule, sel, meta, onScalar }: FieldViewProps) {
     const n = t.data.length;
     return <MatrixView data={t.data} rows={1} cols={n} label={sel.label} rowKind="out" colName="index" bias={bias} onScalar={onScalar} />;
   }
-  return <div className="scalar-empty">Shape {t.shape.join('×')} — no viewer.</div>;
+  return <div className="scalar-empty">Shape {t.shape.join('×')}: no viewer.</div>;
 }
 
 // ---- a conv-style (C × 8 × 8) activation rendered as a 64 × C square-matrix ----
@@ -674,7 +674,7 @@ function PolicyHeadView({ data, fen, turn, onScalar }: { data: Float32Array; fen
       squareValues={pieceToMove}
       squareValueName="P(move this piece)"
       squareValueDesc={(s) =>
-        `P(the model moves the piece on ${squareLabel(s, turn)}) — the summed legal, renormalized policy probability over the 73 move-types from this square.`
+        `P(the model moves the piece on ${squareLabel(s, turn)}): the summed legal, renormalized policy probability over the 73 move-types from this square.`
       }
       boardHeadLabel="P(move) / sq"
       arrows={arrows}
@@ -721,7 +721,7 @@ function GeometryBiasView({ data, heads, onScalar }: { data: Float32Array; heads
       />
       <Legend mode={mode} range={range} />
       <p className="matrix-caption">
-        Rows = Δrank (−7…+7), cols = Δfile (−7…+7); center = same square. The model learned which board offsets matter —
+        Rows = Δrank (−7…+7), cols = Δfile (−7…+7); center = same square. The model learned which board offsets matter;
         nothing about chess geometry was injected.
       </p>
     </div>
@@ -747,7 +747,7 @@ function PlanesView({ data, turn, fen, onScalar }: { data: Float32Array; turn: C
           </button>
         ))}
       </div>
-      <div className="plane-name">plane {plane} — {PLANE_NAMES[plane]}</div>
+      <div className="plane-name">plane {plane}: {PLANE_NAMES[plane]}</div>
       {/* Heatmap canvas with the live pieces overlaid as a non-interactive SVG. */}
       <div className="plane-board" style={{ width: PX, height: PX }}>
         <Heatmap

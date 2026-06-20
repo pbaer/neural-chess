@@ -61,8 +61,8 @@ export function ModelInspector({ client, capsuleUrl, fen }: ModelInspectorProps)
         </button>
         <span className="inspector-hint">
           A look inside the model for the exact position on the board. Each stage below is one step the network runs,
-          top to bottom — from the raw board to its move scores and a “who’s winning” number. Expand any stage to see
-          the real numbers flowing through it (its “activations”) and the learned values it trained to use (its “weights”).
+          top to bottom: from the raw board to its move scores and a “who’s winning” number. Expand any stage to see
+          the numbers flowing through it (its “activations”) and the learned values it trained to use (its “weights”).
         </span>
       </div>
 

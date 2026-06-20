@@ -22,7 +22,7 @@ export function ValueGauge({ model, modelColor }: { model: ModelMoveInfo | null;
   return (
     <div className="value-gauge">
       <div className="value-head">
-        <span className="value-title">Value head — White vs Black</span>
+        <span className="value-title">Value head: White vs Black</span>
         <span className="value-num">{model ? (whiteV >= 0 ? '+' : '') + whiteV.toFixed(2) : '—'}</span>
       </div>
       <div className="value-bar value-bar-split" aria-hidden>

@@ -175,7 +175,7 @@ export function AttentionBoard({ probs, scores, relBias, heads, fen, turn, onSca
       <p className="attn-hint">
         Hover a square to make it the <b>query</b> (gold outline); click to pin it. Colors show how much that square
         attends to each other square{head === -1 ? ' (averaged over heads)' : ` in head ${head}`}. Board is in the
-        network’s frame — the side to move is always at the bottom.
+        network’s frame: the side to move is always at the bottom.
       </p>
     </div>
   );

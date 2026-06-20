@@ -18,7 +18,7 @@ export function MoveCandidates({ store, candidates, onHover }: MoveCandidatesPro
   const top = candidates[0]?.prob || 1;
   return (
     <div className="candidates">
-      <div className="panel-title">Model's suggestions for your move — click to play one</div>
+      <div className="panel-title">Model's suggestions for your move (click to play one)</div>
       <ol className="cand-list" onMouseLeave={() => onHover(null)}>
         {candidates.map((c, i) => {
           const rel = c.prob / top; // 1 for the best, smaller for less likely
@@ -33,7 +33,7 @@ export function MoveCandidates({ store, candidates, onHover }: MoveCandidatesPro
                 onMouseEnter={() => onHover(c.uci)}
                 onFocus={() => onHover(c.uci)}
                 onBlur={() => onHover(null)}
-                title={`${c.san} — ${(c.prob * 100).toFixed(1)}% · click to play this as your move`}
+                title={`${c.san}: ${(c.prob * 100).toFixed(1)}% · click to play this as your move`}
               >
                 <span className="cand-rank">{i + 1}</span>
                 <span className="cand-san">{c.san}</span>
