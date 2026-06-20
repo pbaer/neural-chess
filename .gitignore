@@ -118,3 +118,9 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# Stockfish binaries: only the small classical stockfish-v08.exe is committed.
+# Newer NNUE builds (stockfish-v18.exe is 100 MB+, over GitHub's file limit)
+# are kept LOCAL ONLY; evals auto-prefer the newest local one (src/engine.py).
+bin/stockfish-v*.exe
+!bin/stockfish-v08.exe

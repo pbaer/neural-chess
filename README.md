@@ -247,7 +247,7 @@ For CUDA acceleration (recommended for training):
 pip install torch --index-url https://download.pytorch.org/whl/cu124
 ```
 
-You will also need [Stockfish](https://stockfishchess.org/download/) installed at `bin/stockfish.exe` (Windows) or `bin/stockfish` for engine-vs-engine evaluation. The repo ships with `bin/stockfish.exe` for Windows.
+You will also need [Stockfish](https://stockfishchess.org/download/) for engine-vs-engine evaluation. Binaries live in `bin/` named `stockfish-vNN.exe` (NN = Stockfish major version); the eval/play tooling auto-prefers the **newest** one present (`src/engine.py:resolve_stockfish`). The repo ships the small classical **`bin/stockfish-v08.exe`** (Windows) so a fresh clone works out of the box. For stronger play, drop a newer build alongside it (e.g. `bin/stockfish-v18.exe`) and it's picked up automatically — newer NNUE builds are 100 MB+, over GitHub's file limit, so they're gitignored and kept local only.
 
 ---
 
@@ -460,7 +460,7 @@ Options:
 | `-d`, `--depth` | 0 | Stockfish search depth |
 | `-s`, `--skill` | 0 | Stockfish skill level (0–20) |
 | `--color` | white | Color the model plays |
-| `--stockfish` | `bin/stockfish.exe` | Path to Stockfish executable |
+| `--stockfish` | newest local `bin/stockfish-vNN.exe` | Path to Stockfish executable |
 | `-t`, `--temperature` | 0.5 | Starting softmax temperature (0 = greedy argmax) |
 | `--temp-decay` | 0.05 | `temp = start * exp(-decay * ply)` |
 

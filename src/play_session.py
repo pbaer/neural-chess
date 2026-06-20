@@ -10,7 +10,8 @@ Players (specs):
     agent[:LABEL]        -- same as interactive but tags the session metadata
     neural-chess:PATH    -- a v1 or v2 checkpoint (auto-detected via inference_api)
     stockfish[:DEPTH[:SKILL[:PATH]]]
-                         -- UCI engine. Defaults: depth=10, skill=20, path=bin/stockfish.exe
+                         -- UCI engine. Defaults: depth=10, skill=20,
+                            path=newest local bin/stockfish-vNN.exe
 
 Commands:
     start --white WSPEC --black BSPEC [--game-id ID] [--label LABEL]
@@ -48,11 +49,13 @@ from typing import Optional
 import chess
 import torch
 
+from src.engine import resolve_stockfish
 from src.inference_api import load_policy_engine
 
 SESSION_DIR = os.path.join('tmp', 'play_sessions')
 
-DEFAULT_STOCKFISH = 'bin/stockfish.exe'
+# None → resolve_stockfish() picks the newest local bin/stockfish-vNN.exe.
+DEFAULT_STOCKFISH = None
 
 
 # ---------- Player specs ----------
@@ -143,8 +146,7 @@ def neural_chess_move(board: chess.Board, model_path: str, temperature: float) -
 
 def stockfish_move(board: chess.Board, depth: int, skill: int, path: str) -> chess.Move:
     """Single-shot stockfish move at given depth/skill."""
-    if not os.path.isabs(path) and os.path.exists(path):
-        path = os.path.abspath(path)
+    path = resolve_stockfish(path)
     engine = chess.engine.SimpleEngine.popen_uci(path)
     try:
         engine.configure({'Skill Level': skill})

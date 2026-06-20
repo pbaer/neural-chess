@@ -28,7 +28,8 @@ def main():
     eng.add_argument('-s', '--skill', type=int, default=0, help='Stockfish skill level 0-20 (default: 0)')
     eng.add_argument('--color', choices=['white', 'black'], default='white',
                      help='Color the model plays (default: white)')
-    eng.add_argument('--stockfish', default='bin/stockfish.exe', help='Path to Stockfish executable')
+    eng.add_argument('--stockfish', default=None,
+                     help='Path to Stockfish executable (default: newest local bin/stockfish-vNN.exe)')
     eng.add_argument('-t', '--temperature', type=float, default=0.5,
                      help='Starting temperature for move sampling (0 = greedy, default: 0.5)')
     eng.add_argument('--temp-decay', type=float, default=0.05,
