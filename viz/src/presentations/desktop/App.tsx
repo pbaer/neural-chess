@@ -25,7 +25,7 @@ export function App() {
           <ThemeToggle />
         </div>
         <p className="subtitle">
-          Play a tiny chess model in your browser
+          Play a tiny transformer chess model
         </p>
       </header>
       {store ? (
