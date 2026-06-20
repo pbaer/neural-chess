@@ -1,15 +1,13 @@
-// ModelConfig — the single "Model Configuration" block. Picks the play mode
-// (One-Shot vs MCTS) and shows ONLY the params relevant to that mode:
-//   One-Shot → Move variety.
-//   MCTS     → Move variety + Max simulations + c_puct + Early-cutoff threshold.
-// "Move variety" is shared by both modes; selection is value-adaptive and bounded
-// (sharpens when losing, relaxes when winning, never plays an unreasonable move).
+// ModelConfig — the single "Model Configuration" block. A shared "Move variety"
+// slider (it applies to both modes) leads, then a One-Shot vs MCTS mode toggle.
+// MCTS exposes one tunable, "Max simulations"; the other PUCT knobs (c_puct and
+// the early-cutoff threshold) just use their defaults. "Move variety" is
+// value-adaptive and bounded (sharpens when losing, relaxes when winning, never
+// plays an unreasonable move).
 
 import {
   MCTS_MAX_SIMS,
   MCTS_MIN_SIMS,
-  MCTS_MIN_CUTOFF,
-  MCTS_MAX_CUTOFF,
   type GameState,
   type GameStore,
 } from '../../../core/index.ts';
@@ -28,6 +26,29 @@ export function ModelConfig({ store, state, disabled }: ModelConfigProps) {
   return (
     <div className="model-config">
       <div className="model-config-title">Model Configuration</div>
+
+      {/* Move variety — shared by both modes, so it leads. */}
+      <div className="mcts-slider-row">
+        <span className="mcts-slider-label" title="How much the model varies its play (value-adaptive)">
+          Move variety
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={state.variety}
+          onChange={(e) => set().setVariety(parseFloat(e.target.value))}
+          disabled={disabled}
+          aria-label="Move variety"
+        />
+        <span className="mcts-slider-val">{state.variety <= 0 ? 'top' : state.variety.toFixed(2)}</span>
+      </div>
+      <div className="model-config-hint">
+        {state.variety <= 0
+          ? 'At 0 the model always plays its single top move (fully predictable). Slide up to let it sometimes choose other strong moves, so games don’t all feel the same.'
+          : 'How willing the model is to play a move other than its top pick. It’s value-aware: it sharpens toward its best move when it judges it’s losing, and allows more variety when it’s comfortably ahead — but it never plays a move a strong player would reject.'}
+      </div>
 
       <div className="mode-toggle" role="tablist" aria-label="Play mode">
         <button
@@ -51,31 +72,8 @@ export function ModelConfig({ store, state, disabled }: ModelConfigProps) {
       </div>
       <div className="model-config-hint">
         {mctsOn
-          ? 'AlphaZero-style PUCT search using only the model’s priors (P) and value (V) — no chess heuristics. Runs up to the max sims, cutting off early once one move is clearly best.'
-          : 'One forward pass per move: the model’s policy picks the move directly.'}
-      </div>
-
-      {/* Move variety — shared by both modes. */}
-      <div className="mcts-slider-row">
-        <span className="mcts-slider-label" title="How much the model varies its play (value-adaptive)">
-          Move variety
-        </span>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={state.variety}
-          onChange={(e) => set().setVariety(parseFloat(e.target.value))}
-          disabled={disabled}
-          aria-label="Move variety"
-        />
-        <span className="mcts-slider-val">{state.variety <= 0 ? 'top' : state.variety.toFixed(2)}</span>
-      </div>
-      <div className="model-config-hint">
-        {state.variety <= 0
-          ? 'Deterministic: always the model’s single best move.'
-          : 'Sharpens to the best move when losing, explores more when winning — but never a move a strong player would reject.'}
+          ? 'MCTS (Monte Carlo Tree Search): instead of answering at a glance, the model “thinks ahead”: it plays out many short what-if lines from this position, spending more of them on the moves that look most promising, then plays the move those trials backed up best. The search is steered only by the model’s own move hunches and position scores — no outside chess knowledge is added. It runs up to the simulation cap, but stops early once one move is the clear favorite.'
+          : 'One-Shot: the model looks at the position once and names its move — a single pass through the network, with no looking ahead. Fast, and how the model plays by default.'}
       </div>
 
       {mctsOn && (
@@ -95,41 +93,9 @@ export function ModelConfig({ store, state, disabled }: ModelConfigProps) {
             />
             <span className="mcts-slider-val">{m.sims}</span>
           </label>
-
-          <label className="mcts-slider-row">
-            <span className="mcts-slider-label" title="PUCT exploration constant">
-              c_puct
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={4}
-              step={0.1}
-              value={m.cPuct}
-              onChange={(e) => set().setMctsSettings({ cPuct: parseFloat(e.target.value) })}
-              disabled={disabled}
-            />
-            <span className="mcts-slider-val">{m.cPuct.toFixed(1)}</span>
-          </label>
-
-          <label className="mcts-slider-row">
-            <span
-              className="mcts-slider-label"
-              title="Stop early once the top move reaches this share of visits"
-            >
-              Early cutoff
-            </span>
-            <input
-              type="range"
-              min={MCTS_MIN_CUTOFF}
-              max={MCTS_MAX_CUTOFF}
-              step={0.05}
-              value={m.cutoffThreshold}
-              onChange={(e) => set().setMctsSettings({ cutoffThreshold: parseFloat(e.target.value) })}
-              disabled={disabled}
-            />
-            <span className="mcts-slider-val">{Math.round(m.cutoffThreshold * 100)}%</span>
-          </label>
+          <div className="model-config-hint mcts-slider-help">
+            How many what-if trials the search may run before it has to move. More trials = stronger play, but it takes longer to move.
+          </div>
         </div>
       )}
     </div>

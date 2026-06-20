@@ -44,7 +44,12 @@ export function SearchPanel({ search, thinking, modelColor, onHover, hoverUci }:
       )}
 
       <div className="search-eval">
-        <span className="search-eval-label">Backed-up eval</span>
+        <span
+          className="search-eval-label"
+          title="Backed-up value: the search’s refined position score, averaged up the tree from all the trials (mover’s side: +1 winning, −1 losing)."
+        >
+          Score after search
+        </span>
         <span className={'search-eval-num ' + (whiteEval >= 0 ? 'eval-w' : 'eval-b')}>
           {(whiteEval >= 0 ? '+' : '') + whiteEval.toFixed(2)}
         </span>
@@ -52,8 +57,8 @@ export function SearchPanel({ search, thinking, modelColor, onHover, hoverUci }:
       </div>
 
       {pv.length > 0 && (
-        <div className="search-pv" title="Principal variation — the line the search currently considers best">
-          <span className="search-pv-label">PV</span>
+        <div className="search-pv" title="Principal variation — the move sequence the search currently thinks is best for both sides.">
+          <span className="search-pv-label">Best line</span>
           <span className="search-pv-line">{pv.map((m) => m.san).join(' ')}</span>
         </div>
       )}
@@ -62,11 +67,11 @@ export function SearchPanel({ search, thinking, modelColor, onHover, hoverUci }:
         <thead>
           <tr>
             <th className="st-move">move</th>
-            <th className="st-n" title="visit count">N</th>
+            <th className="st-n" title="N — how many what-if trials explored this move">N</th>
             <th className="st-bar" />
-            <th className="st-q" title="mean action value (root mover's view)">Q</th>
-            <th className="st-p" title="policy prior">P</th>
-            <th className="st-puct" title="Q + c·P·√ΣN/(1+N)">PUCT</th>
+            <th className="st-q" title="Q — how those trials turned out, mover’s side (+1 best … −1 worst)">Q</th>
+            <th className="st-p" title="P — the model’s first-glance probability for this move">P</th>
+            <th className="st-puct" title="PUCT selection score = Q + c·P·√ΣN/(1+N) — balances exploit (Q) vs. explore (P, low N)">PUCT</th>
           </tr>
         </thead>
         <tbody onMouseLeave={() => onHover?.(null)}>
@@ -88,6 +93,12 @@ export function SearchPanel({ search, thinking, modelColor, onHover, hoverUci }:
           ))}
         </tbody>
       </table>
+
+      <p className="search-legend">
+        Each row is a candidate move. <b>N</b> = how many what-if trials explored it (the move with the most trials is the one played);{' '}
+        <b>Q</b> = how those trials turned out, +1 great to −1 bad, from the mover’s side; <b>P</b> = the model’s first-glance hunch for the move;{' '}
+        <b>PUCT</b> = the score that balances trying moves that already scored well (Q) against promising or rarely-tried ones (P, low N), deciding what to explore next.
+      </p>
     </div>
   );
 }
