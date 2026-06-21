@@ -22,6 +22,7 @@ import {
   epTargetAfterMove,
   epTargetFromFen,
 } from './chessAdapter.ts';
+import { loadPersisted, savePersisted, clearPersisted } from './persistence.ts';
 
 export type PromotionPiece = 'q' | 'r' | 'b' | 'n';
 export type GameStatus = 'idle' | 'thinking' | 'over';
@@ -189,6 +190,57 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
   const repKey = () => chess.fen().split(' ').slice(0, 4).join(' ');
   const recordPosition = () => repCounts.set(repKey(), (repCounts.get(repKey()) ?? 0) + 1);
 
+  // The position the current game started from (null = standard start). Tracked so
+  // persistence + repetition rebuilds replay from the right root (also for FEN games).
+  let startFen: string | null = null;
+
+  /** Rebuild repetition counts by replaying the whole game from `startFen`. */
+  function rebuildRepCounts(): void {
+    repCounts = new Map();
+    const rp = new Chess(startFen ?? undefined);
+    repCounts.set(rp.fen().split(' ').slice(0, 4).join(' '), 1);
+    for (const m of chess.history({ verbose: true })) {
+      rp.move({ from: m.from, to: m.to, promotion: m.promotion });
+      const k = rp.fen().split(' ').slice(0, 4).join(' ');
+      repCounts.set(k, (repCounts.get(k) ?? 0) + 1);
+    }
+  }
+
+  // ── Restore a persisted game across a page refresh (board + settings only; the
+  //    model/worker reloads fresh). Defensive: any malformed/incompatible blob is
+  //    ignored and we just start a normal game.
+  const restoreDefaults = {
+    humanColor: initialHumanColor,
+    assist: false,
+    variety: DEFAULT_VARIETY,
+    mcts: { ...MCTS_DEFAULTS } as MctsSettings,
+  };
+  const persisted = loadPersisted(restoreDefaults);
+  const restored = { ...restoreDefaults };
+  if (persisted) {
+    try {
+      const c = new Chess(persisted.startFen ?? undefined);
+      for (const m of persisted.moves) c.move({ from: m.from, to: m.to, promotion: m.promotion });
+      chess = c;
+      startFen = persisted.startFen ?? null;
+      restored.humanColor = persisted.humanColor;
+      restored.assist = persisted.assist;
+      restored.variety = persisted.variety;
+      restored.mcts = persisted.mcts;
+      const verbose = chess.history({ verbose: true });
+      const lastV = verbose[verbose.length - 1];
+      lastMove = lastV ? { fromIdx: algToIdx(lastV.from), toIdx: algToIdx(lastV.to) } : null;
+      epSquare = epTargetFromFen(chess.fen());
+    } catch {
+      // Corrupt/incompatible save → discard and start fresh.
+      chess = new Chess();
+      startFen = null;
+      lastMove = null;
+      epSquare = null;
+      clearPersisted();
+    }
+  }
+
   function boardState() {
     const count = repCounts.get(repKey()) ?? 0;
     return chessToBoardState(chess, { epSquare, isRepetition: (n) => count >= n });
@@ -219,6 +271,23 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         lastMove,
         error: null,
         ...extra,
+      });
+    }
+
+    /** Save the current game (position + settings) so a refresh restores it.
+     *  Persists only landed moves — never a mid-flash / "thinking" transient. */
+    function persist(): void {
+      savePersisted({
+        startFen,
+        moves: chess.history({ verbose: true }).map((m) => ({
+          from: m.from,
+          to: m.to,
+          ...(m.promotion ? { promotion: m.promotion } : {}),
+        })),
+        humanColor: get().humanColor,
+        assist: get().assist,
+        variety: get().variety,
+        mcts: { ...get().mcts },
       });
     }
 
@@ -295,6 +364,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         policyProb: prob,
       };
       commit({ lastModelMove: info, flashMove: null, previewMoves: null });
+      persist();
       // Back to the human → surface move-assistant suggestions if enabled.
       refreshSuggestions();
     }
@@ -340,6 +410,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       lastMove = { fromIdx: algToIdx(mv.from), toIdx: algToIdx(mv.to) };
       recordPosition();
       commit({ suggestions: null, flashMove: null });
+      persist();
       if (!chess.isGameOver() && chess.turn() !== get().humanColor) void runModel();
       else refreshSuggestions();
     }
@@ -474,35 +545,48 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       thinkToken++; // cancel any in-flight reply
       engine.cancelSearch?.(); // stop any in-flight worker search
       chess = fen ? new Chess(fen) : new Chess();
+      startFen = fen ?? null;
       repCounts = new Map();
       epSquare = fen ? epTargetFromFen(fen) : null;
       lastMove = null;
       suggestToken++; // drop any pending suggestion reply
       recordPosition();
       commit({ humanColor, lastModelMove: null, suggestions: null, search: null, flashMove: null, previewMoves: null });
+      persist();
       if (!chess.isGameOver() && chess.turn() !== humanColor) void runModel();
       else refreshSuggestions(); // human to move → assistant suggestions if enabled
     }
 
     // ---- initial state ----
-    recordPosition();
+    // rebuildRepCounts handles both a fresh game (just the start position) and a
+    // restored multi-move game (all positions, for threefold detection).
+    rebuildRepCounts();
     const sr0 = statusResult();
+    // If a restored game left the MODEL to move, resume it once the store is wired
+    // (microtask, so set/get are live). engine.forward/search await the worker, so
+    // this is safe even before weights finish loading. Else, surface assist
+    // suggestions if they were enabled. (No-op for a fresh game: human is to move.)
+    if (!chess.isGameOver() && chess.turn() !== restored.humanColor) {
+      queueMicrotask(() => void runModel());
+    } else if (restored.assist) {
+      queueMicrotask(() => refreshSuggestions());
+    }
     return {
       fen: chess.fen(),
       turn: chess.turn() as Color,
-      humanColor: initialHumanColor,
+      humanColor: restored.humanColor,
       sanHistory: chess.history(),
       status: sr0.status,
       resultText: sr0.resultText,
       inCheck: chess.inCheck(),
-      lastMove: null,
+      lastMove,
       lastModelMove: null,
-      assist: false,
-      variety: DEFAULT_VARIETY,
+      assist: restored.assist,
+      variety: restored.variety,
       suggestions: null,
       flashMove: null,
       previewMoves: null,
-      mcts: { ...MCTS_DEFAULTS },
+      mcts: restored.mcts,
       search: null,
       error: null,
 
@@ -537,15 +621,18 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
 
       setAssist(on) {
         set({ assist: on });
+        persist();
         refreshSuggestions(); // compute on the human's turn, else clear
       },
 
       setVariety(s) {
         set({ variety: Math.min(1, Math.max(0, Number.isFinite(s) ? s : 0)) });
+        persist();
       },
 
       setMctsEnabled(on) {
         set({ mcts: { ...get().mcts, enabled: on } });
+        persist();
       },
 
       setMctsSettings(patch) {
@@ -560,6 +647,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         }
         if (patch.enabled !== undefined) next.enabled = patch.enabled;
         set({ mcts: next });
+        persist();
       },
 
       loadFen(fen) {
@@ -577,21 +665,16 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         const undone: boolean[] = [chess.undo() != null];
         if (!chess.isGameOver() && chess.turn() !== get().humanColor) undone.push(chess.undo() != null);
         if (!undone.some(Boolean)) return;
-        // Rebuild repetition counts from scratch (cheap: short history).
-        repCounts = new Map();
-        const replay = new Chess();
-        repCounts.set(replay.fen().split(' ').slice(0, 4).join(' '), 1);
-        for (const m of chess.history({ verbose: true })) {
-          replay.move({ from: m.from, to: m.to, promotion: m.promotion });
-          const k = replay.fen().split(' ').slice(0, 4).join(' ');
-          repCounts.set(k, (repCounts.get(k) ?? 0) + 1);
-        }
+        // Rebuild repetition counts from scratch (cheap: short history; replays
+        // from startFen so FEN-started games are handled correctly too).
+        rebuildRepCounts();
         const hist = chess.history({ verbose: true });
         const last = hist[hist.length - 1];
-        epSquare = last ? epTargetAfterMove(last) : null;
+        epSquare = last ? epTargetAfterMove(last) : epTargetFromFen(chess.fen());
         lastMove = last ? { fromIdx: algToIdx(last.from), toIdx: algToIdx(last.to) } : null;
         suggestToken++;
         commit({ lastModelMove: null, suggestions: null, search: null, flashMove: null, previewMoves: null });
+        persist();
         refreshSuggestions(); // back on the human's turn → suggestions if enabled
       },
 

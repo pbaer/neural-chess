@@ -25,7 +25,16 @@ export function GameControls({ store, state, disabled, suggestions }: GameContro
   // FEN button. Starting a fresh game (White/Black) collapses it again.
   const [fenMode, setFenMode] = useState(false);
 
+  // Confirm before discarding a game that's more than 3 moves in (and not over),
+  // so a stray New Game / FEN-load click doesn't wipe a game in progress.
+  const inProgress = state.sanHistory.length > 3 && state.status !== 'over';
+  const confirmDiscard = () =>
+    !inProgress ||
+    (typeof window === 'undefined') ||
+    window.confirm('Start a new game? Your current game will be lost.');
+
   const start = (color: Color) => {
+    if (!confirmDiscard()) return;
     setFenMode(false);
     setFenError(null);
     store.getState().newGame(color);
@@ -83,6 +92,7 @@ export function GameControls({ store, state, disabled, suggestions }: GameContro
             className="btn"
             disabled={disabled || !fen.trim()}
             onClick={() => {
+              if (!confirmDiscard()) return;
               const ok = store.getState().loadFen(fen.trim());
               setFenError(ok ? null : (store.getState().error ?? 'Invalid FEN'));
               if (ok) {
