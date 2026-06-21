@@ -90,6 +90,15 @@ body {
   font-size: 14px;
 }
 
+.subtitle-story a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.subtitle-story a:hover {
+  text-decoration: underline;
+}
+
 .theme-toggle {
   flex: none;
   white-space: nowrap;

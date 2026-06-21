@@ -25,7 +25,10 @@ export function App() {
           <ThemeToggle />
         </div>
         <p className="subtitle">
-          Play a tiny transformer chess model
+          Play a tiny transformer chess model{' '}
+          <span className="subtitle-story">
+            (<a href={`${import.meta.env.BASE_URL ?? '/'}story.html`}>story</a>)
+          </span>
         </p>
       </header>
       {store ? (

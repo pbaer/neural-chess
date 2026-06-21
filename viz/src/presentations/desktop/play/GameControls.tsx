@@ -67,18 +67,6 @@ export function GameControls({ store, state, disabled, suggestions }: GameContro
         </button>
       </div>
 
-      <label className="control-row pick-toggle assist-toggle">
-        <input
-          type="checkbox"
-          checked={state.assist}
-          onChange={(e) => store.getState().setAssist(e.target.checked)}
-          disabled={disabled}
-        />
-        <span className="control-label">Show model hints of its top moves for you</span>
-      </label>
-
-      {suggestions}
-
       {fenMode && (
         <div className="control-row">
           <input
@@ -106,6 +94,18 @@ export function GameControls({ store, state, disabled, suggestions }: GameContro
         </div>
       )}
       {fenMode && fenError && <div className="error-text">{fenError}</div>}
+
+      <label className="control-row pick-toggle assist-toggle">
+        <input
+          type="checkbox"
+          checked={state.assist}
+          onChange={(e) => store.getState().setAssist(e.target.checked)}
+          disabled={disabled}
+        />
+        <span className="control-label">Show model hints of its top moves for you</span>
+      </label>
+
+      {suggestions}
     </div>
   );
 }
