@@ -8,6 +8,7 @@
 import {
   MCTS_MAX_SIMS,
   MCTS_MIN_SIMS,
+  estimateElo,
   type GameState,
   type GameStore,
 } from '../../../core/index.ts';
@@ -22,10 +23,20 @@ export function ModelConfig({ store, state, disabled }: ModelConfigProps) {
   const mctsOn = state.mcts.enabled;
   const m = state.mcts;
   const set = store.getState;
+  const elo = estimateElo(mctsOn, m.sims, state.variety);
 
   return (
     <div className="model-config">
-      <div className="model-config-title">Model Configuration</div>
+      <div
+        className="model-config-title"
+        title={
+          'The ~Elo is this model’s approximate playing strength for the current settings, calibrated by playing it ' +
+          'against Stockfish 18. It updates with the mode, the max-simulations slider, and Move variety (more variety ' +
+          'plays a little weaker). Anchored to Stockfish’s own Elo scale, which only roughly matches FIDE / online ratings.'
+        }
+      >
+        Model Configuration <span className="model-config-elo">(~{elo.elo} Elo)</span>
+      </div>
 
       {/* Move variety — shared by both modes, so it leads. */}
       <div className="mcts-slider-row">
@@ -98,6 +109,7 @@ export function ModelConfig({ store, state, disabled }: ModelConfigProps) {
           </div>
         </div>
       )}
+
     </div>
   );
 }

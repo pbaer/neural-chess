@@ -79,6 +79,10 @@ export type { TraceField } from './model-graph/traceIndex.ts';
 export { content, CONTENT } from './content/registry.ts';
 export type { ContentCard } from './content/registry.ts';
 
+// ── Strength estimate: Stockfish-anchored Elo as a function of play settings.
+export { estimateElo, ONESHOT_ELO, MCTS_ANCHORS, ONESHOT_PENALTY, MCTS_PENALTY } from './strength/elo.ts';
+export type { EloEstimate } from './strength/elo.ts';
+
 // ── Search (MCTS) — optional "think harder" move generator + its visualization.
 export { MCTS, makeEngineEvaluator, runSearch } from './search/index.ts';
 export type {

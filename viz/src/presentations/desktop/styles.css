@@ -1317,6 +1317,18 @@ body {
   margin-top: -2px;
 }
 
+/* Estimated-strength Elo shown in the Model Configuration title. Updates with
+   mode + max-sims + Move variety. */
+.model-config-title {
+  cursor: help;
+}
+
+.model-config-elo {
+  color: var(--muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- MCTS ("think harder") controls ---- */
 .mcts-controls {
   display: flex;
