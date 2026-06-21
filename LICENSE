@@ -24,19 +24,37 @@ SOFTWARE.
 
 Scope note (not part of the MIT grant above):
 
-- The MIT license applies to the SOURCE CODE in this repository.
-- The bulk training data and the large trained model weights (e.g. v3-37M and
-  the other models under model/) are NOT covered by this license and are not
-  distributed here (they are gitignored). They derive in part from TWIC
-  (theweekinchess.com), whose terms are "personal use only", so that data and
-  the weights derived from it are personal-use only and must not be
+- The MIT license applies to the SOURCE CODE in this repository ONLY. It does
+  NOT cover any trained model weights or training data.
+
+- TRAINED MODEL WEIGHTS are NOT licensed under the MIT license above — neither
+  the large models (e.g. v3-37M and the others under model/, which are
+  gitignored and not distributed here) nor the small browser model that IS
+  committed to this repository.
+
+  The browser model weights — the Model Capsule under viz/public/weights/ (the
+  ~116k-parameter distilled net the web app runs) — are committed and deployed
+  to GitHub Pages for ONE purpose: so that the web player and visualization can
+  let people see and play the model in order to illustrate how its architecture
+  works. With respect to those weights:
+
+    * They are provided for PERSONAL, NON-COMMERCIAL use only.
+    * They are made available STRICTLY for that illustrative purpose (viewing
+      and playing the model within this web tool). No right is granted to
+      redistribute, sublicense, sell, or reuse the weights in other software,
+      products, or services, or for any commercial purpose.
+    * They are derived in part from TWIC (theweekinchess.com) data, whose terms
+      are "personal use only" — which independently prohibits commercial use and
+      wholesale redistribution of the data and anything derived from it.
+
+  No warranty is given for the weights, and all rights not expressly granted are
+  reserved.
+
+- TRAINING DATA (the corpus and shards under data/) is NOT covered by this
+  license, is not distributed here (gitignored), and — being derived in part
+  from TWIC "personal use only" data — is personal-use only and must not be
   redistributed wholesale.
-- One small set of weights IS published: the browser Model Capsule under
-  viz/public/weights/ (the ~116k-parameter distilled net the web tool runs).
-  It is committed and deployed to GitHub Pages solely so the web app works, and
-  is provided for use within this web tool only. Because it too derives in part
-  from TWIC (personal-use) data, NO separate redistribution or reuse grant is
-  made for these weights — the MIT grant above does not extend to them.
+
 - Third-party assets bundled with the web tool retain their own licenses; see
   viz/THIRD_PARTY.md for attribution.
 
