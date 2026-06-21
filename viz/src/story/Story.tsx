@@ -385,24 +385,25 @@ function JourneyTimeline() {
 /** One noisy game vs. many games pooled through a position. */
 function SignalDiagram() {
   return (
-    <svg viewBox="0 0 460 150" className="fig" role="img" aria-label="One game versus many pooled games">
-      <g transform="translate(10,10)">
+    <svg viewBox="0 0 460 168" className="fig" role="img" aria-label="One game versus many pooled games">
+      <g transform="translate(10,8)">
         <text x="0" y="10" className="fig-label-strong">One game</text>
-        <line x1="6" y1="26" x2="180" y2="26" stroke="var(--line)" strokeWidth="2" />
-        {[6, 50, 94, 138, 180].map((x, i) => <circle key={i} cx={x} cy={26} r="4" fill="var(--muted)" />)}
+        <line x1="6" y1="30" x2="180" y2="30" stroke="var(--line)" strokeWidth="2" />
+        {[6, 50, 94, 138, 180].map((x, i) => <circle key={i} cx={x} cy={30} r="4" fill="var(--muted)" />)}
         <text x="6" y="52" className="fig-label">one move, one result — noisy</text>
       </g>
-      <g transform="translate(10,80)">
+      <g transform="translate(10,86)">
         <text x="0" y="10" className="fig-label-strong">Every game through one position</text>
-        {/* many paths converging on a node */}
-        {[0, 14, 28, 42, 56].map((dy, i) => (
-          <line key={i} x1="6" y1={6 + dy} x2="150" y2="32" stroke="var(--accent)" strokeWidth="1.5" opacity="0.55" />
+        {/* many paths converging on a node — kept BELOW the title so they don't
+            overlap the text */}
+        {[0, 12, 24, 36, 48].map((dy, i) => (
+          <line key={i} x1="6" y1={24 + dy} x2="150" y2="48" stroke="var(--accent)" strokeWidth="1.5" opacity="0.55" />
         ))}
-        <circle cx="150" cy="32" r="6" fill="var(--accent)" />
-        <Arrow x1={164} x2={216} y={32} />
-        <text x="224" y="28" className="fig-label-strong">average outcome</text>
-        <text x="224" y="44" className="fig-label-strong">+ spread of moves</text>
-        <text x="224" y="60" className="fig-label">clean signal</text>
+        <circle cx="150" cy="48" r="6" fill="var(--accent)" />
+        <Arrow x1={164} x2={216} y={48} />
+        <text x="224" y="44" className="fig-label-strong">average outcome</text>
+        <text x="224" y="60" className="fig-label-strong">+ spread of moves</text>
+        <text x="224" y="76" className="fig-label">clean signal</text>
       </g>
     </svg>
   );
