@@ -162,8 +162,8 @@ export function Story() {
           <p>
             We then went the other direction and made the model <em>tiny</em> — small enough that you can look at
             every single number it contains and watch it think. (That&rsquo;s the model on the main page, and what
-            the Model Inspector is showing you.) Shrinking it taught us which parts were truly load-bearing and
-            which were dead weight we could throw away, leaving a leaner, cleaner design.
+            the Model Inspector is showing you.) Shrinking it taught us which parts actually earned their keep
+            and which were dead weight we could throw away, leaving a leaner, cleaner design.
           </p>
 
           <h3 className="story-h3">A small student with a good teacher</h3>
@@ -200,17 +200,27 @@ export function Story() {
         <Section title="So how strong is it, really?">
           <p>
             To put a number on it, we had the model play hundreds of games against a calibrated opponent
-            (Stockfish, dialed to known strength levels) and measured where it held its own. The answer depends
-            entirely on how hard you let it think.
+            (Stockfish, dialed to known strength levels) and measured where it held its own.
           </p>
+          <p>
+            First, a yardstick. Chess strength is measured in <strong>Elo</strong> — a single rating number where
+            higher is stronger and a 100-point gap is a noticeable edge. Rough landmarks: a beginner sits around
+            800, a casual player about 1,200, a club player 1,600, an &ldquo;expert&rdquo; 2,000, a master near
+            2,200&ndash;2,400, and the world champion hovers around 2,800 (Magnus Carlsen peaked at 2,882). Our
+            numbers come from playing Stockfish, so they track this familiar scale, give or take.
+          </p>
+          <Figure caption="Where this model lands on the rating ladder — from a casual player up to master strength, depending on how hard it thinks.">
+            <EloScale />
+          </Figure>
+          <p>And exactly where it lands depends entirely on how hard you let it think:</p>
           <Figure caption="Estimated strength versus how much the model thinks. Notice the dip at the far left — a tiny bit of search is worse than none — and the steady climb after.">
             <EloCurve />
           </Figure>
           <p>
             At a single glance it plays around the level of a solid club player. Let it think for a couple of
-            seconds and it climbs into strong-amateur, even expert, territory — enough to give a serious player a
-            real game. On the main page, the &ldquo;estimated Elo&rdquo; in the configuration panel is reading off
-            exactly this calibration, updating live as you change the settings.
+            seconds and it climbs into strong-amateur, even expert territory — enough to give a serious club or
+            tournament player a real game. On the main page, the &ldquo;estimated Elo&rdquo; in the configuration
+            panel is reading off exactly this calibration, updating live as you change the settings.
           </p>
         </Section>
 
@@ -241,6 +251,22 @@ export function Story() {
           </p>
           <p className="story-cta">
             <a className="story-cta-link" href={PLAY_URL}>Play Neural Chess →</a>
+          </p>
+        </Section>
+
+        <Section title="Who made this">
+          <p>
+            Neural Chess was built as a close back-and-forth between <strong>Peter Baer</strong> and{' '}
+            <strong>Claude Code</strong> (Anthropic&rsquo;s AI coding agent) — the two of us bouncing ideas off
+            each other the whole way.
+          </p>
+          <p>
+            Peter set the direction: the goal, the three principles that make the experiment worth doing, and the
+            judgment calls about which ideas to chase and which results were worth keeping. Claude did the hands-on
+            building — the model, the training, the experiments, and the analysis of what came back — and, drawing
+            on a working knowledge of neural networks and chess, proposed designs, weighed the trade-offs, and
+            acted as a sounding board to think out loud with. It ran as a loop: pitch an idea, argue it through,
+            build it, measure it, learn something (often from a failure), and decide the next step together.
           </p>
         </Section>
       </article>
@@ -378,6 +404,34 @@ function SignalDiagram() {
         <text x="224" y="44" className="fig-label-strong">+ spread of moves</text>
         <text x="224" y="60" className="fig-label">clean signal</text>
       </g>
+    </svg>
+  );
+}
+
+/** A rating ladder with landmark levels and where this model sits. */
+function EloScale() {
+  const lo = 800, hi = 2900, W = 460, H = 96, x0 = 18, x1 = 442, y = 60;
+  const xs = (e: number) => x0 + ((e - lo) / (hi - lo)) * (x1 - x0);
+  const marks: [number, string][] = [
+    [800, 'beginner'], [1200, 'casual'], [1600, 'club'],
+    [2000, 'expert'], [2400, 'master'], [2800, 'champion'],
+  ];
+  const bandLo = 1300, bandHi = 2474; // model: ~shallow-MCTS up to 300-sim play
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="fig" role="img" aria-label="Chess rating ladder and where the model sits">
+      {/* the model's range */}
+      <rect x={xs(bandLo)} y={y - 13} width={xs(bandHi) - xs(bandLo)} height={13} rx={3}
+        fill="var(--accent)" opacity="0.35" stroke="var(--accent)" />
+      <text x={(xs(bandLo) + xs(bandHi)) / 2} y={y - 19} textAnchor="middle" className="fig-label-strong">this model</text>
+      {/* axis + landmarks */}
+      <line x1={x0} y1={y} x2={x1} y2={y} stroke="var(--muted)" strokeWidth="2" />
+      {marks.map(([e, l]) => (
+        <g key={e}>
+          <line x1={xs(e)} y1={y - 4} x2={xs(e)} y2={y + 4} stroke="var(--muted)" strokeWidth="2" />
+          <text x={xs(e)} y={y + 18} textAnchor="middle" className="fig-label-strong">{e}</text>
+          <text x={xs(e)} y={y + 31} textAnchor="middle" className="fig-label">{l}</text>
+        </g>
+      ))}
     </svg>
   );
 }
