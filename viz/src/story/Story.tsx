@@ -195,6 +195,17 @@ export function Story() {
             the search is shallow and noisy and actually plays <em>worse</em> than the instant, one-glance move.
             It takes a real budget of thinking before searching pays off — after which it climbs steadily.
           </Insight>
+
+          <h3 className="story-h3">All on one desktop machine</h3>
+          <p>
+            None of this needed a data center. Every model and experiment in this story was trained on a{' '}
+            <strong>single consumer graphics card</strong> — an NVIDIA RTX 4080 Super, the kind of GPU a PC gamer
+            might have, with 16&nbsp;GB of memory. The largest models took a few hours for each pass through the
+            millions of games; the tiny one you&rsquo;re playing trains from scratch in about an hour. A big part
+            of the project was finding tricks to make the training fast enough to actually iterate on a setup like
+            that — packing the whole dataset into memory so the graphics card never waits on the disk, for
+            instance — so that trying a new idea took minutes, not days.
+          </p>
         </Section>
 
         <Section title="So how strong is it, really?">
