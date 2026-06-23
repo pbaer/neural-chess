@@ -691,10 +691,10 @@ neural-chess/
 
 ## Provenance and license
 
-- **Code**: [MIT](LICENSE) © Peter Baer — permissive; reuse freely **with attribution** (keep the copyright + license notice). **The MIT license covers the source code only — it does NOT cover any model weights or training data** (see below).
-- **Chess piece graphics** (web tool): the *cburnett* set by Colin M.L. Burnett, used under BSD — see `viz/THIRD_PARTY.md`.
-- **Training data is fully open (CC0).** The model is trained entirely on openly-licensed human games from **Lichess** — the Lichess Elite database and the Lichess standard monthly database — which Lichess dedicates to the public domain under **CC0**. The corpus carries no licensing encumbrance; the shards under `data/` are gitignored only for size.
-- **Model weights are NOT MIT-licensed — personal, non-commercial, illustrative use only.** The web tool bundles one small set of weights (the browser Model Capsule under `viz/public/weights/`, the ~116k distilled net). It is committed and deployed to GitHub Pages for a single purpose: **so the web player and visualization can let people see and play the model to illustrate how its architecture works.** Those weights are provided **for personal, non-commercial use only**, **strictly for that illustrative purpose** — there is **no grant to redistribute, sublicense, sell, or reuse the weights in other software/products/services, or for any commercial purpose** (the author reserves all rights not expressly granted). See the [LICENSE](LICENSE) scope note. The large GPU models (under `model/`) are likewise not MIT-licensed and are unpublished.
-- **Browser weights provenance**: the hero (`v3.1-clean-distilled`) is **distilled** from our own human-trained, CC0-only `v3.1-37M` teacher — no engine signal at any point (see [Distillation](#distillation--the-browser-hero)).
-- **No engine-derived training signal** (Stockfish evaluations, MCTS rollouts, etc.) is used anywhere in any version, per the project principles.
-- **No engine-derived training signal** (Stockfish evaluations, MCTS rollouts, etc.) is used anywhere in any version, per the project principles.
+Clean and simple — everything in this project is openly licensed:
+
+- **Code** — [MIT](LICENSE) © Peter Baer. Reuse freely with attribution.
+- **Model weights** — **CC0 1.0** (public domain), matching their training data. The browser Model Capsule under `viz/public/weights/` (and the larger models under `model/`, gitignored for size) are dedicated to the public domain: use, modify, and redistribute for any purpose, including commercially, with no conditions.
+- **Training data** — **CC0**. Trained entirely on openly-licensed human games from **Lichess** (the Lichess Elite database + the Lichess standard monthly database), which Lichess dedicates to the public domain under CC0. No licensing encumbrance; `data/` is gitignored only for size.
+- **Third-party** (keep their own licenses): **Stockfish** (`bin/stockfish-*.exe`, GPLv3 — used only as a separate program for strength evaluation, never in training) and **pgn-extract** (`bin/pgn-extract.exe`, GPL); the **cburnett** chess pieces in the web tool (BSD, © Colin M.L. Burnett — see `viz/THIRD_PARTY.md`).
+- **Provenance**: the browser hero (`v3.1-clean-distilled`) is **distilled** from our own CC0-trained `v3.1-37M` teacher — **no engine-derived training signal** (Stockfish evals, MCTS rollouts, etc.) anywhere in any version, per the project principles.

@@ -22,38 +22,31 @@ SOFTWARE.
 
 ---
 
-Scope note (not part of the MIT grant above):
+Scope note (what the MIT grant above covers, and the rest):
 
-- The MIT license applies to the SOURCE CODE in this repository ONLY. It does
-  NOT cover any trained model weights or training data.
+- SOURCE CODE — the MIT license above. © Peter Baer. Reuse freely with
+  attribution.
 
-- TRAINED MODEL WEIGHTS are NOT licensed under the MIT license above — neither
-  the large models (e.g. v3-37M and the others under model/, which are
-  gitignored and not distributed here) nor the small browser model that IS
-  committed to this repository.
+- TRAINED MODEL WEIGHTS (the browser Model Capsule under viz/public/weights/,
+  and the larger models under model/) — dedicated to the PUBLIC DOMAIN under
+  CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/),
+  matching their training data. You may use, copy, modify, and distribute them
+  for any purpose, including commercially, with no conditions. (Only the small
+  browser model is committed here; the large models are gitignored for size.)
 
-  The browser model weights — the Model Capsule under viz/public/weights/ (the
-  ~116k-parameter distilled net the web app runs) — are committed and deployed
-  to GitHub Pages for ONE purpose: so that the web player and visualization can
-  let people see and play the model in order to illustrate how its architecture
-  works. With respect to those weights:
+- TRAINING DATA — entirely openly-licensed human games from Lichess (the Lichess
+  Elite database and the Lichess standard monthly database), which Lichess
+  dedicates to the public domain under CC0. The corpus and shards under data/
+  are gitignored only for size; they carry no licensing encumbrance.
 
-    * They are provided for PERSONAL, NON-COMMERCIAL use only.
-    * They are made available STRICTLY for that illustrative purpose (viewing
-      and playing the model within this web tool). No right is granted to
-      redistribute, sublicense, sell, or reuse the weights in other software,
-      products, or services, or for any commercial purpose.
-
-  No warranty is given for the weights, and all rights not expressly granted are
-  reserved.
-
-- TRAINING DATA. The model is trained entirely on openly-licensed human chess
-  games from Lichess (the Lichess Elite database and the Lichess standard
-  monthly database), which Lichess dedicates to the public domain under CC0. The
-  training corpus and shards under data/ are not distributed here only because
-  of their size (gitignored); they contain no licensing encumbrance.
-
-- Third-party assets bundled with the web tool retain their own licenses; see
-  viz/THIRD_PARTY.md for attribution.
+- THIRD-PARTY components keep their own licenses (not covered by the grants
+  above):
+    * Stockfish (bin/stockfish-*.exe) — GPLv3, © the Stockfish developers. Used
+      only as a separate program for strength evaluation; not linked into this
+      code and not used in training. Source: https://github.com/official-stockfish/Stockfish
+    * pgn-extract (bin/pgn-extract.exe) — GPL, © David J. Barnes.
+      https://www.cs.kent.ac.uk/people/staff/djb/pgn-extract/
+    * cburnett chess pieces (web tool) — BSD, © Colin M.L. Burnett. Full terms
+      and attribution in viz/THIRD_PARTY.md.
 
 See the README "Provenance and license" section.

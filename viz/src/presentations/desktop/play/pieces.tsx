@@ -1,6 +1,6 @@
 // Chess pieces — the **cburnett** vector set (the standard Wikipedia / Lichess
 // pieces, by Colin M.L. Burnett). Used here under the BSD license; see
-// `viz/THIRD_PARTY.md` and the repo `THIRD_PARTY.md` for attribution.
+// `viz/THIRD_PARTY.md` (and the repo LICENSE third-party section) for attribution.
 //
 // These are *complete, pre-colored* SVGs (white = light fill + dark outline;
 // black = dark fill + outline with light interior strokes), NOT silhouettes to
