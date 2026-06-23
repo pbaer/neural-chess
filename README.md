@@ -214,9 +214,9 @@ A line of tiny "teaching" models (small enough that **every weight/activation is
 
 ## Distillation — the browser hero
 
-The 116k v3.1 net is **capacity-saturated on human labels** (train ≈ val, plateaued) — at that size it cannot get stronger from more human-move supervision. **Knowledge distillation** pushes it past that ceiling: the strong **`v3-37M` teacher** (itself trained only on human games) labels every position in the tau corpus with its full soft policy (top-32 logits) and value (`src/v3/teacher_label.py`), and a fresh 116k student is trained to match that richer distribution (the `--distill-dir / --distill-alpha / --distill-temp` flags in `train_agg_fast.py`). Pure-teacher (`α=1.0, T=2`) wins; mixing the human labels back in *hurt*.
+The 116k v3.1 net is **capacity-saturated on human labels** (train ≈ val, plateaued) — at that size it cannot get stronger from more human-move supervision. **Knowledge distillation** pushes it past that ceiling: a strong **`v3.1-37M` teacher** (37.4M, no-conv v3.1 + tau recipe, trained only on the CC0 Lichess corpus) labels every position in the tau corpus with its full soft policy (top-32 logits) and value (`src/v3/teacher_label.py`), and a fresh 116k student is trained to match that richer distribution (the `--distill-dir / --distill-alpha / --distill-temp` flags in `train_agg_fast.py`). Pure-teacher (`α=1.0, T=2`) wins; mixing the human labels back in *hurt*.
 
-The result, **`D-a10-t2`**, is **policy-indistinguishable** from the human-trained `v3.1-eq` in raw play (head-to-head ≈ 0.50 over 1,000 games) but has a **better value head** — invisible in one-shot play, yet **decisive under MCTS**: 0.72 with **zero losses over 240 games** at 50 sims, and a higher Stockfish-magnus win rate (8%→30% as sims go 100→200). The web tool ships `D-a10-t2` precisely because its "think harder" (MCTS) mode is what the stronger value head exploits.
+The result, **`v3.1-clean-distilled`**, is **policy-indistinguishable** from the human-trained `v3.1-eq` in raw play (head-to-head ≈ 0.50) but has a **much better value head** — invisible in one-shot play, yet **decisive under MCTS**, where the value head drives the search. The web tool ships `v3.1-clean-distilled` precisely because its "think harder" (MCTS) mode is what the stronger value head exploits. (Its teacher is trained entirely on CC0 Lichess data, so the whole pipeline is license-clean.)
 
 > **Principle note:** distillation is the one place a *model* — not raw human games — supplies the training signal. The teacher is human-games-only (no engine, no self-play), so no external chess knowledge enters; this is an explicit, user-granted carve-out for the **browser serving model only**, kept off the main GPU-model line. Documented in `memory/browser-distill-mcts.md`.
 
@@ -228,11 +228,11 @@ A public, static, **educational** browser app (React + Vite + TypeScript) that r
 
 The **estimated Elo** in the configuration panel is empirical, not a guess: the GPU twin of the browser model played ~326 games against **Stockfish 18** (`UCI_LimitStrength` at calibrated Elo rungs, move selection through the same value-adaptive logic the app uses), and its Elo was fit per setting by maximum likelihood. The displayed number = `base(mode, sims) − varietyPenalty(mode, variety)`, interpolated in `log(sims)`. Measured span: **~1310** (10-sim MCTS — shallow search actually trails one-shot's ~1572) rising to **~2474** at 300 sims; the one-shot variety penalty is large (−180/−304 at variety 0.5/1.0) while MCTS's is small (a Q-margin floor bounds it). Anchored to Stockfish's own Elo scale (roughly tracks FIDE/online). Calibration harness: `eval/v3/elo_calibrate.py`; the table lives in `viz/src/core/strength/elo.ts`.
 
-The browser hero is **`D-a10-t2`** — the [distilled](#distillation--the-browser-hero) 116k net above. It is **architecture-version-neutral**: instead of a `.pt` it loads a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` graph + `weights.bin` + `config.json`), so it renders whatever architecture the capsule declares. Chess piece graphics are the *cburnett* set (BSD; see `viz/THIRD_PARTY.md`), and a footer carries the license + attribution + repo link. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
+The browser hero is **`v3.1-clean-distilled`** — the [distilled](#distillation--the-browser-hero) 116k net above. It is **architecture-version-neutral**: instead of a `.pt` it loads a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` graph + `weights.bin` + `config.json`), so it renders whatever architecture the capsule declares. Chess piece graphics are the *cburnett* set (BSD; see `viz/THIRD_PARTY.md`), and a footer carries the license + attribution + repo link. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
 
 ## Roadmap — next big model
 
-With v2 (scale), v3 (attention), the tau data recipe, the v3.1 lean architecture, distillation, and the web tool all done, **one major lever remains: a full-size v3.1 model.** **`v3.1-37M-tau`** stacks the three validated levers — the v3.1 (no-conv) architecture + the tau data recipe + ~37M capacity (matching the current best raw model `v3-37M`, so the comparison isolates the gain) — for the **strongest possible model** (GPU-only; far too large to run in the browser). Train with `train_agg_fast.py` in BF16, ~10–16 epochs, `--save-every-steps`; eval on the full SF ladder + h2h vs v3-37M; projected ≈ +79 Elo from tau alone. **Caveat:** no-conv is validated only at ~116k, so an 18M conv-vs-no-conv A/B is cheap insurance before committing the full run. The web tool is otherwise feature-complete — only small viz tweaks are expected going forward. Full plan + risks (incl. the degraded training box, RMA pending): `memory/future-architecture-roadmap.md`.
+v2 (scale), v3 (attention), the tau data recipe, the v3.1 lean architecture, distillation, and the web tool are all done — and the last big lever has now been pulled too: **`v3.1-37M`** (37.4M, no-conv v3.1 + tau recipe, trained on the CC0-clean corpus) was built as the strongest model and used as the **distillation teacher** for the browser hero `v3.1-clean-distilled`. The whole pipeline — data, teacher, and browser model — is license-clean (CC0 Lichess only). The web tool is feature-complete; only small viz tweaks are expected going forward. Background + plans: `memory/future-architecture-roadmap.md`.
 
 ## Setup
 
@@ -283,7 +283,7 @@ The v2 pipeline is **three sequential steps** living in `data/v2/_acquire/`. The
 
 | Stage | Approx size |
 |-------|------------:|
-| Raw archives (Lichess Elite + monthly + TWIC zips/zsts) | ~6 GB |
+| Raw archives (Lichess Elite + Lichess monthly zips/zsts) | ~35 GB |
 | Filtered tier PGNs | ~1.1 GB |
 | 8M shard (smaller smoke-test) | ~11 GB |
 | 40M-position training shard (binary memmap) | ~51 GB |
@@ -298,10 +298,9 @@ Reserve **~20 GB** for an 8M smoke-test reconstruction (~60 GB through the 40M s
 python data/v2/_acquire/download.py
 ```
 
-Downloads (per [data/v2/README.md](data/v2/README.md)):
-- **Lichess Elite** (nikonoel) — all monthly archives. CC0 (Creative Commons public-domain dedication).
-- **Lichess monthly** (`database.lichess.org`) — three most recent months of standard rapid+. CC0.
-- **TWIC** (The Week in Chess, theweekinchess.com) — issues 1500 through latest. "Personal use" license — do not redistribute the raw PGNs or the filtered output.
+Downloads (per [data/v2/README.md](data/v2/README.md)) — **all sources are CC0** (Creative Commons public-domain dedication), so the whole corpus is openly licensed and free of any usage restrictions:
+- **Lichess Elite** (nikonoel) — all monthly archives. CC0 (inherits from Lichess).
+- **Lichess monthly** (`database.lichess.org`) — standard rapid+ games. CC0.
 
 Progress is checkpointed to `data/v2/_acquire/download_progress.json`; re-running resumes incomplete downloads.
 
@@ -313,7 +312,7 @@ Progress is checkpointed to `data/v2/_acquire/download_progress.json`; re-runnin
 python data/v2/_acquire/filter.py
 ```
 
-Streams the raw archives (priority: Elite > TWIC > Lichess monthly for dedup), applies filters:
+Streams the raw archives (priority: Elite > Lichess monthly for dedup), applies filters:
 
 | Filter | Criterion | Why |
 |--------|-----------|-----|
@@ -326,8 +325,8 @@ Streams the raw archives (priority: Elite > TWIC > Lichess monthly for dedup), a
 | Variant | Standard chess only | We don't model variants |
 
 Writes:
-- `data/v2/filtered/tier_top_2400plus.pgn` (Elite + TWIC top)
-- `data/v2/filtered/tier_mid_1900-2400.pgn` (Lichess monthly mid)
+- `data/v2/filtered/tier_top_2400plus.pgn` (Lichess Elite)
+- `data/v2/filtered/tier_mid_1900-2400.pgn` (Lichess Elite / monthly mid)
 - `data/v2/filtered/tier_low_1600-1900.pgn` (Lichess monthly low)
 - `data/v2/games_index.parquet` — per-game metadata (Elos, source, result)
 - `data/v2/manifest.json` — counts + provenance
@@ -648,8 +647,8 @@ neural-chess/
 │       ├── v3.2/            # v3.2 ablation runs (R1..R8 — all confirmed v3.1 is tight)
 │       ├── truemin/         # true-minimum scale pass (smallest v3.1 beating sf_easy = d24/b8 ~70.6k)
 │       ├── v3-micro-tau/, v3-nano-tau/   # teaching models (conv-stem era)
-│       ├── distill/         # distilled 116k students (D-a10-t2 = browser hero) from the v3-37M teacher
-│       └── v3.1-nano/       # exported-hero checkpoint (= D-a10-t2, distilled) backing the web-tool capsule
+│       ├── distill/         # distilled 116k students from the v3.1-37M teacher (browser hero = v3.1-clean-distilled)
+│       └── v3.1-nano/       # exported-hero checkpoint (= v3.1-clean-distilled) backing the web-tool capsule
 ├── src/
 │   ├── inference_api.py     # PolicyEngine abstract base + load_policy_engine factory (arch auto-detect)
 │   ├── engine.py            # Stockfish/UCI helpers
@@ -694,8 +693,8 @@ neural-chess/
 
 - **Code**: [MIT](LICENSE) © Peter Baer — permissive; reuse freely **with attribution** (keep the copyright + license notice). **The MIT license covers the source code only — it does NOT cover any model weights or training data** (see below).
 - **Chess piece graphics** (web tool): the *cburnett* set by Colin M.L. Burnett, used under BSD — see `viz/THIRD_PARTY.md`.
-- **Model weights are NOT MIT-licensed — personal, non-commercial, illustrative use only.** The web tool bundles one small set of weights (the `D-a10-t2` Model Capsule under `viz/public/weights/`, the ~116k distilled net). It is committed and deployed to GitHub Pages for a single purpose: **so the web player and visualization can let people see and play the model to illustrate how its architecture works.** Those weights are provided **for personal, non-commercial use only**, **strictly for that illustrative purpose** — there is **no grant to redistribute, sublicense, sell, or reuse the weights in other software/products/services, or for any commercial purpose**. They also derive in part from TWIC ("personal use only") data, which independently forbids commercial use and wholesale redistribution. See the [LICENSE](LICENSE) scope note. The large GPU models (under `model/`) are likewise not MIT-licensed, and are unpublished / personal-use.
-- **Browser weights provenance**: the hero (`D-a10-t2`) is **distilled** from our own human-trained `v3-37M` teacher — no engine signal at any point (see [Distillation](#distillation--the-browser-hero)).
-- **v1 training data**: derived from open historical PGNs (TWIC + Lichess) — derived NPZ shards may be redistributed.
-- **v2 training data**: mixed sources. Lichess content is CC0; **TWIC content is "personal use only" and the filtered tier PGNs / shards derived from it must NOT be redistributed wholesale.** Training data and weights derived from this mix are personal-use only.
+- **Training data is fully open (CC0).** The model is trained entirely on openly-licensed human games from **Lichess** — the Lichess Elite database and the Lichess standard monthly database — which Lichess dedicates to the public domain under **CC0**. The corpus carries no licensing encumbrance; the shards under `data/` are gitignored only for size.
+- **Model weights are NOT MIT-licensed — personal, non-commercial, illustrative use only.** The web tool bundles one small set of weights (the browser Model Capsule under `viz/public/weights/`, the ~116k distilled net). It is committed and deployed to GitHub Pages for a single purpose: **so the web player and visualization can let people see and play the model to illustrate how its architecture works.** Those weights are provided **for personal, non-commercial use only**, **strictly for that illustrative purpose** — there is **no grant to redistribute, sublicense, sell, or reuse the weights in other software/products/services, or for any commercial purpose** (the author reserves all rights not expressly granted). See the [LICENSE](LICENSE) scope note. The large GPU models (under `model/`) are likewise not MIT-licensed and are unpublished.
+- **Browser weights provenance**: the hero (`v3.1-clean-distilled`) is **distilled** from our own human-trained, CC0-only `v3.1-37M` teacher — no engine signal at any point (see [Distillation](#distillation--the-browser-hero)).
+- **No engine-derived training signal** (Stockfish evaluations, MCTS rollouts, etc.) is used anywhere in any version, per the project principles.
 - **No engine-derived training signal** (Stockfish evaluations, MCTS rollouts, etc.) is used anywhere in any version, per the project principles.

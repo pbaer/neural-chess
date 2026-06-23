@@ -13,7 +13,7 @@ There's also a **story page** (`story.html` → `src/story/`) — a narrative, g
 ## Decisions locked
 - **Inference:** hand-written TypeScript forward pass (no ONNX), in a Web Worker, with a PyTorch parity test (identical argmax move required).
 - **Stack:** React + Vite + TypeScript; SVG/Canvas2D/WebGL render split under one shared zoom camera.
-- **Hero model:** the capsule under `public/weights/v3.1-nano/` is **`D-a10-t2`** — a 116k pure-transformer (no conv stem) net **distilled** from the `v3-37M` teacher (policy-equal to the human-trained `v3.1-eq`, stronger value head → markedly stronger under MCTS). See the repo README's *Distillation* section.
+- **Hero model:** the capsule under `public/weights/v3.1-nano/` is **`v3.1-clean-distilled`** — a 116k pure-transformer (no conv stem) net **distilled** from a `v3.1-37M` teacher trained entirely on CC0 Lichess data (policy-equal to the human-trained `v3.1-eq`, much stronger value head → markedly stronger under MCTS). The whole pipeline is license-clean. See the repo README's *Distillation* section.
 - **Search:** in-browser PUCT MCTS is **built** (it was originally a future seam) — uses only the model's own policy priors and value, no chess heuristics (Principle-3 carve-out).
 - **Scope:** read-only (no weight editing); play vs the model with a "watch it think" forward-pass trace; the Model Inspector telescope.
 - **Assets/licensing:** *cburnett* chess pieces (BSD, see `THIRD_PARTY.md`); a footer carries license (MIT) + attribution + repo link.

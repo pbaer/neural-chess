@@ -2,7 +2,7 @@
   "capsule_version": 1,
   "arch": "v3.1",
   "model_id": "v3.1-nano",
-  "created": "2026-06-14T10:18:18",
+  "created": "2026-06-22T21:52:16",
   "param_count": 116266,
   "stored_floats": 116234,
   "folded_bn": true,
@@ -19,7 +19,7 @@
   },
   "weights_file": "weights.bin",
   "weights_bytes": 464936,
-  "weights_sha256": "e86792dc5604ab1281e9a4491234a3c85d72c7ca2a04d6eb87b437982679b9de",
+  "weights_sha256": "5b584935b8a23a662096d2ecc34f2af8c580058252ef0567194b080187945468",
   "tensors": [
     {
       "name": "stem.embed.weight",

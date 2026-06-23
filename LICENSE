@@ -43,17 +43,15 @@ Scope note (not part of the MIT grant above):
       and playing the model within this web tool). No right is granted to
       redistribute, sublicense, sell, or reuse the weights in other software,
       products, or services, or for any commercial purpose.
-    * They are derived in part from TWIC (theweekinchess.com) data, whose terms
-      are "personal use only" — which independently prohibits commercial use and
-      wholesale redistribution of the data and anything derived from it.
 
   No warranty is given for the weights, and all rights not expressly granted are
   reserved.
 
-- TRAINING DATA (the corpus and shards under data/) is NOT covered by this
-  license, is not distributed here (gitignored), and — being derived in part
-  from TWIC "personal use only" data — is personal-use only and must not be
-  redistributed wholesale.
+- TRAINING DATA. The model is trained entirely on openly-licensed human chess
+  games from Lichess (the Lichess Elite database and the Lichess standard
+  monthly database), which Lichess dedicates to the public domain under CC0. The
+  training corpus and shards under data/ are not distributed here only because
+  of their size (gitignored); they contain no licensing encumbrance.
 
 - Third-party assets bundled with the web tool retain their own licenses; see
   viz/THIRD_PARTY.md for attribution.
