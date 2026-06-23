@@ -32,17 +32,18 @@ export function Story() {
             Chess engines have crushed the best humans for decades, but they do it with brute force: searching
             millions of positions a second and scoring them with rules people hand-wrote (&ldquo;a rook is worth
             five pawns,&rdquo; &ldquo;control the center,&rdquo; and so on). That&rsquo;s impressive, but it
-            answers a slightly boring question — <em>can a calculator out-calculate us?</em> Yes. We knew that.
+            answers a slightly boring question — <em>can a calculator out-calculate a person?</em> Yes; that was
+            settled long ago.
           </p>
           <p>
-            We wanted a more interesting one: <strong>how much chess can a machine figure out on its own, just
-            from watching humans play?</strong> No built-in rules of thumb, no engine to copy. Only the raw
-            record of games: the positions, the moves people chose, and who eventually won.
+            A more interesting question drives this project: <strong>how much chess can a machine figure out on its
+            own, just from watching humans play?</strong> No built-in rules of thumb, no engine to copy. Only the
+            raw record of games: the positions, the moves people chose, and who eventually won.
           </p>
         </Section>
 
-        <Section title="The rules we set for ourselves">
-          <p>To keep the question honest, we held to three principles the whole way through.</p>
+        <Section title="The ground rules">
+          <p>To keep the question honest, three principles held the whole way through.</p>
           <ol className="story-principles">
             <li>
               <strong>Human games only.</strong> Every example it learns from was played by people. No engine
@@ -52,28 +53,27 @@ export function Story() {
               <strong>Learn only from what&rsquo;s on the board.</strong> Picture a robot that knows nothing about
               chess, watching games over someone&rsquo;s shoulder. It sees where the pieces are, it sees which
               move gets played, and it sees who wins. From that — and nothing else — it has to work out what
-              matters. We never hand it &ldquo;material count&rdquo; or &ldquo;king safety.&rdquo; If those ideas
-              matter, it has to <em>discover</em> them.
+              matters. It is never handed &ldquo;material count&rdquo; or &ldquo;king safety.&rdquo; If those
+              ideas matter, it has to <em>discover</em> them.
             </li>
             <li>
               <strong>One look, one move.</strong> By default the model glances at the position once and names its
-              move — a single pass through the network, no searching ahead. (Later we added an optional
-              &ldquo;think harder&rdquo; mode, but even then the only judgment it uses is its own. More on that
-              below.)
+              move — a single pass through the network, no searching ahead. (An optional &ldquo;think harder&rdquo;
+              mode was added later, but even then the only judgment it uses is its own — more on that below.)
             </li>
           </ol>
           <p>
-            These constraints are the whole point. Hand the model a pile of chess wisdom and you learn how strong
-            a hand-fed model can get — which isn&rsquo;t what we wanted to know. We wanted to see what it could
-            figure out by watching.
+            These constraints are the whole point. Hand the model a pile of chess wisdom and you only learn how
+            strong a hand-fed model can get — not the interesting question. The point is what it can figure out by
+            watching.
           </p>
         </Section>
 
         <Section title="How a network &ldquo;sees&rdquo; a board">
           <p>
-            A neural network only does arithmetic, so the first job is turning a chessboard into numbers. We hand
-            it the position as a stack of small 8&times;8 grids — one grid marking where the pawns are, one for the
-            knights, and so on, plus a few for things like castling rights and whose turn it is. Everything in
+            A neural network only does arithmetic, so the first job is turning a chessboard into numbers. The
+            position is fed in as a stack of small 8&times;8 grids — one grid marking where the pawns are, one for
+            the knights, and so on, plus a few for things like castling rights and whose turn it is. Everything in
             that stack is just what you could write down by looking; no judgments, only facts.
           </p>
           <Figure caption="Every move: the board becomes numbers, flows through the network, and comes out as two things — a ranked list of moves, and a single &ldquo;who&rsquo;s winning&rdquo; score.">
@@ -91,7 +91,7 @@ export function Story() {
 
         <Section title="The journey">
           <p>
-            We didn&rsquo;t get here in one step. The model went through several generations, and the most useful
+            The model didn&rsquo;t arrive in one step. It went through several generations, and the most useful
             lessons came from the things that <em>didn&rsquo;t</em> work.
           </p>
 
@@ -104,17 +104,16 @@ export function Story() {
             The earliest versions were built from the same kind of network that recognizes cats in photos (a
             &ldquo;convolutional&rdquo; network, good at spotting local patterns). The first one learned real
             chess — sensible openings, reasonable moves — which was already a small thrill. But it had blind
-            spots: drop an unexpected threat in front of it and it would walk right into trouble. So we made it
-            bigger, taught it to play both colors, and — importantly — gave it that second output, the
-            who&rsquo;s-winning score, by letting it learn from how each game ended.
+            spots: drop an unexpected threat in front of it and it would walk right into trouble. So it was made
+            bigger, taught to play both colors, and — importantly — given that second output, the
+            who&rsquo;s-winning score, by learning from how each game ended.
           </p>
 
           <Insight kind="fail" label="What didn&rsquo;t work">
-            We tried to be clever and build &ldquo;look a few moves ahead&rdquo; directly into the network&rsquo;s
-            wiring. It sounded great. It flopped: taking that same budget and just making the plain network{' '}
-            <em>bigger</em> beat it on every measure. The lesson stuck with us — <strong>don&rsquo;t hand-engineer
-            cleverness the model can learn on its own.</strong> Give it capacity and good signal, and get out of
-            the way.
+            An early attempt built &ldquo;look a few moves ahead&rdquo; directly into the network&rsquo;s wiring.
+            It sounded great. It flopped: taking that same budget and just making the plain network <em>bigger</em>{' '}
+            beat it on every measure. The lesson — <strong>don&rsquo;t hand-engineer cleverness the model can learn
+            on its own.</strong> Give it capacity and good signal, and get out of the way.
           </Insight>
 
           <h3 className="story-h3">A better shape: attention</h3>
@@ -129,17 +128,16 @@ export function Story() {
 
           <h3 className="story-h3">The real bottleneck wasn&rsquo;t size — it was signal</h3>
           <p>
-            Here&rsquo;s where it got interesting. We kept making the model bigger, and it kept barely improving.
-            Its sense of <em>who&rsquo;s winning</em>, in particular, hit a wall. The problem turned out not to be
-            the model at all — it was the <strong>data</strong>.
+            Here&rsquo;s where it got interesting. Making the model bigger kept barely moving the needle. Its sense
+            of <em>who&rsquo;s winning</em>, in particular, hit a wall. The problem turned out not to be the model
+            at all — it was the <strong>data</strong>.
           </p>
           <p>
-            Think about how we&rsquo;d been teaching it: for each position, &ldquo;a human played this one move,
-            and that one game ended this way.&rdquo; But a single game&rsquo;s result is noisy — good positions get
-            lost and lost positions get saved all the time. So we changed the lesson. We gathered <em>every</em>{' '}
-            game that ever passed through a given position and handed the model the <strong>average</strong>{' '}
-            outcome and the <strong>full spread of moves</strong> people chose there. Same model, far cleaner
-            signal.
+            Consider how it had been taught: for each position, &ldquo;a human played this one move, and that one
+            game ended this way.&rdquo; But a single game&rsquo;s result is noisy — good positions get lost and lost
+            positions get saved all the time. So the lesson changed: <em>every</em> game that ever passed through a
+            given position was pooled, and the model was handed the <strong>average</strong> outcome and the{' '}
+            <strong>full spread of moves</strong> people chose there. Same model, far cleaner signal.
           </p>
           <Figure caption="One game gives a noisy hint. Pooling every game through a position gives a clean target: how it usually turns out, and what people actually play.">
             <SignalDiagram />
@@ -152,38 +150,37 @@ export function Story() {
           </Insight>
 
           <Insight kind="fail" label="What didn&rsquo;t work">
-            A tempting idea: if we want a strong model, train it only on the games of the <em>strongest</em>{' '}
-            players. We tried it. It was <strong>worse.</strong> The variety in a broad mix of human play — the
-            mistakes and all — carried more useful signal than a narrow diet of master games. Intuition lost to
-            measurement, which happened more than once.
+            Surely a strong model should train only on the games of the <em>strongest</em> players? Tried — and it
+            was <strong>worse.</strong> The variety in a broad mix of human play — the mistakes and all — carried
+            more useful signal than a narrow diet of master games. Intuition lost to measurement, which happened
+            more than once.
           </Insight>
 
           <h3 className="story-h3">Shrinking it down so you can see inside</h3>
           <p>
-            We then went the other direction and made the model <em>tiny</em> — small enough that you can look at
-            every single number it contains and watch it think. (That&rsquo;s the model on the main page, and what
-            the Model Inspector is showing you.) Shrinking it taught us which parts actually earned their keep
-            and which were dead weight we could throw away, leaving a leaner, cleaner design.
+            The model was then taken the other direction — shrunk until it was <em>tiny</em>, small enough that you
+            can look at every single number it contains and watch it think. (That&rsquo;s the model on the main
+            page, and what the Model Inspector is showing you.) Shrinking it revealed which parts actually earned
+            their keep and which were dead weight to throw away, leaving a leaner, cleaner design.
           </p>
 
           <h3 className="story-h3">A small student with a good teacher</h3>
           <p>
-            A model that small can only learn so much from raw human games on its own. So we used a trick called{' '}
-            <strong>distillation</strong>: we let our biggest, strongest model act as a <em>teacher</em>, and had
-            the tiny model learn to imitate the teacher&rsquo;s full judgment rather than just the bare record of
-            human games. The student punches well above its weight — especially in its sense of who&rsquo;s
-            winning. (The teacher, importantly, only ever learned from human games too, so no outside chess
-            knowledge sneaks in.)
+            A model that small can only learn so much from raw human games on its own. So a trick called{' '}
+            <strong>distillation</strong> steps in: the biggest, strongest model acts as a <em>teacher</em>, and the
+            tiny model learns to imitate the teacher&rsquo;s full judgment rather than just the bare record of human
+            games. The student punches well above its weight — especially in its sense of who&rsquo;s winning. (The
+            teacher, importantly, only ever learned from human games too, so no outside chess knowledge sneaks in.)
           </p>
           <Insight kind="fail" label="A surprise">
-            We assumed the best recipe would <em>blend</em> the teacher&rsquo;s guidance with the original human
-            data. It didn&rsquo;t: mixing the two actively <strong>hurt</strong>. Learning purely from the teacher
-            won cleanly. Another reminder that the obvious-sounding approach often isn&rsquo;t the right one.
+            The obvious recipe would <em>blend</em> the teacher&rsquo;s guidance with the original human data. It
+            didn&rsquo;t work: mixing the two actively <strong>hurt</strong>. Learning purely from the teacher won
+            cleanly. Another reminder that the obvious-sounding approach often isn&rsquo;t the right one.
           </Insight>
 
           <h3 className="story-h3">Letting it think harder</h3>
           <p>
-            Finally, we gave the model an optional way to spend more effort on a move. Instead of answering at a
+            Finally, the model gets an optional way to spend more effort on a move. Instead of answering at a
             glance, it can play out many short &ldquo;what if&rdquo; lines from the current position, spending more
             of them on the moves that look promising, then play whatever those trials support best. Crucially, the
             only compass it uses is its own move preferences and who&rsquo;s-winning scores — no outside chess
@@ -210,14 +207,14 @@ export function Story() {
 
         <Section title="So how strong is it, really?">
           <p>
-            To put a number on it, we had the model play hundreds of games against a calibrated opponent
-            (Stockfish, dialed to known strength levels) and measured where it held its own.
+            To put a number on it, the model played hundreds of games against a calibrated opponent (Stockfish,
+            dialed to known strength levels), measuring where it held its own.
           </p>
           <p>
             First, a yardstick. Chess strength is measured in <strong>Elo</strong> — a single rating number where
             higher is stronger and a 100-point gap is a noticeable edge. Rough landmarks: a beginner sits around
             800, a casual player about 1,200, a club player 1,600, an &ldquo;expert&rdquo; 2,000, a master near
-            2,200&ndash;2,400, and the world champion hovers around 2,800 (Magnus Carlsen peaked at 2,882). Our
+            2,200&ndash;2,400, and the world champion hovers around 2,800 (Magnus Carlsen peaked at 2,882). These
             numbers come from playing Stockfish, so they track this familiar scale, give or take.
           </p>
           <Figure caption="Where this model lands on the rating ladder — from a casual player up to master strength, depending on how hard it thinks.">
@@ -267,17 +264,9 @@ export function Story() {
 
         <Section title="Who made this">
           <p>
-            Neural Chess was built as a close back-and-forth between <strong>Peter Baer</strong> and{' '}
-            <strong>Claude Code</strong> (Anthropic&rsquo;s AI coding agent) — the two of us bouncing ideas off
-            each other the whole way.
-          </p>
-          <p>
-            Peter set the direction: the goal, the three principles that make the experiment worth doing, and the
-            judgment calls about which ideas to chase and which results were worth keeping. Claude did the hands-on
-            building — the model, the training, the experiments, and the analysis of what came back — and, drawing
-            on a working knowledge of neural networks and chess, proposed designs, weighed the trade-offs, and
-            acted as a sounding board to think out loud with. It ran as a loop: pitch an idea, argue it through,
-            build it, measure it, learn something (often from a failure), and decide the next step together.
+            Created by{' '}
+            <a href="https://www.linkedin.com/in/peterpbaer/" target="_blank" rel="noopener noreferrer">Peter Baer</a>{' '}
+            using Claude Code.
           </p>
         </Section>
       </article>
