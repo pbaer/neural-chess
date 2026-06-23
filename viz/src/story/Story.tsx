@@ -18,7 +18,7 @@ export function Story() {
       </header>
 
       <article className="story-body">
-        <h1 className="story-title">How a tiny machine learned chess by watching</h1>
+        <h1 className="story-title">How a neural network learned chess</h1>
         <p className="story-lede">
           The little model you can play on the main page has about <strong>116,000 numbers</strong> inside it —
           smaller than a single photo on your phone. It never read a chess book, was never told what a good move
