@@ -51,36 +51,50 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            A new issue was filed. Implement a fix in the working tree.
+            Implement the following feature/bug request by EDITING FILES in this
+            repository. You must make the actual code changes yourself — do not
+            merely describe a plan, and do not stop until it is done.
 
             Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
 
             ${{ github.event.issue.body }}
 
-            Read CLAUDE.md at the repo root first — it defines the project
-            principles, the required validation commands, and the test-coverage
-            rules. Then:
-            - Implement the smallest change that fully addresses the issue, matching
-              existing code conventions. Most changes live in `viz/`.
-            - Add or update deterministic tests covering the new/changed behavior
-              (UX → a `*.dom.test.tsx` component test; logic → a Node `*.test.ts`).
-              No LLM/network in tests.
-            - Validate from `viz/`: run `npm ci` once, then `npm run typecheck`,
-              `npm test`, and `npm run build`. Fix any failures. Run each command
-              only as many times as you need — do not loop needlessly.
-            - Do NOT create a branch, commit, push, or open a PR — the workflow does
-              all of that automatically after you finish. Just leave your finished
-              changes in the working tree.
-            - If the request violates the project principles (human-games-only data,
-              no engine-derived signal, CC0 / no TWIC), make NO code changes and run
-              `gh issue comment ${{ github.event.issue.number }} --body "<why>"` to
-              explain, then stop.
+            Steps:
+            1. Read CLAUDE.md at the repo root (project principles, validation
+               commands, test-coverage rules).
+            2. Explore the relevant code under `viz/` to see how to implement this.
+            3. Implement the smallest change that fully addresses the issue, matching
+               existing conventions. Most changes live in `viz/`.
+            4. Add or update deterministic tests for the new/changed behavior
+               (UX → a `*.dom.test.tsx` component test; logic → a Node `*.test.ts`).
+               No LLM/network in tests.
+            5. Validate from `viz/`: run `npm ci`, then `npm run typecheck`,
+               `npm test`, and `npm run build`. Fix every failure.
+
+            You are NOT done until the feature is implemented, tests are added, and
+            `npm test` and `npm run build` both pass. Do NOT end your turn with only
+            a plan or a question — make the changes.
+
+            Do NOT run git or open a PR — the workflow commits your working-tree
+            changes and opens the PR automatically. ONLY exception: if the request
+            genuinely violates the project principles (human-games-only data, no
+            engine-derived signal, CC0 / no TWIC), make NO code changes and run
+            `gh issue comment ${{ github.event.issue.number }} --body "<why>"`, then stop.
           # Bash is needed for npm; git/gh are handled by the workflow, not Claude.
-          # Swap to a stronger model (e.g. --model claude-opus-4-8) if a task needs it.
           claude_args: |
             --allowedTools "Bash,Edit,MultiEdit,Write,Read,Glob,Grep,NotebookEdit,TodoWrite"
             --max-turns 80
-            --model claude-sonnet-5
+            --model claude-opus-4-8
+
+      # Debug aid: the action logs only init/result to the run log, so grab the
+      # full turn-by-turn transcript to diagnose under-execution.
+      - name: Upload Claude transcript
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-transcript
+          path: ${{ runner.temp }}/claude-execution-output.json
+          if-no-files-found: ignore
 
       - name: Open pull request from the agent's changes
         if: ${{ !cancelled() }}
