@@ -46,7 +46,34 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      # Whichever attempt succeeded supplies the URL (|| = first non-empty).
+      url: ${{ steps.deploy1.outputs.page_url || steps.deploy2.outputs.page_url || steps.deploy3.outputs.page_url }}
     steps:
-      - id: deployment
+      # actions/deploy-pages intermittently fails with "Deployment failed, try
+      # again later" (a transient GitHub Pages backend error, build unaffected).
+      # Retry up to 3 times with backoff so the deploy self-heals. Each attempt
+      # is gated on the previous one having failed; the first two are non-fatal.
+      - name: Deploy to GitHub Pages (attempt 1)
+        id: deploy1
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Backoff before attempt 2
+        if: steps.deploy1.outcome == 'failure'
+        run: sleep 30
+
+      - name: Deploy to GitHub Pages (attempt 2)
+        id: deploy2
+        if: steps.deploy1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Backoff before attempt 3
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
+        run: sleep 90
+
+      # Final attempt — NOT continue-on-error, so if this fails the job fails.
+      - name: Deploy to GitHub Pages (attempt 3, final)
+        id: deploy3
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
         uses: actions/deploy-pages@v4
