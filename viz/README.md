@@ -24,3 +24,44 @@ There's also a **story page** (`story.html` → `src/story/`) — a narrative, g
 
 ## Layout
 See `IMPLEMENTATION_PLAN.md` §"Revised directory tree" for the annotated structure and the 6-milestone roadmap (M1 engine+parity → … → M6 polish/deploy).
+
+## Feedback → agentic fix workflow
+
+The app has a built-in loop from **user feedback** to a **reviewed pull request**, driven by an AI coding agent (Claude Code) and gated on maintainer approval. This section documents how to triage and process the issues it produces.
+
+### 1. A user submits feedback (in-app → GitHub issue)
+
+A muted **Feedback** link sits in the footer of both pages (play + story). It opens a small dialog (🐞 Bug / 💡 Feature, title, details) and, on submit, opens a **prefilled GitHub "new issue" URL** in a new tab — the reporter reviews it and clicks *Submit* under their own GitHub account. There is **no backend and no secret**: the site is a static GitHub Pages deploy, so the widget never calls the GitHub API. Bug reports auto-attach environment context (hero model id, FEN, last model move, move number, browser).
+
+- Widget: `src/feedback/Feedback.tsx` (+ `feedback.css`); URL builder is `buildIssueUrl()`.
+- Issue Forms for people filing directly on GitHub: `.github/ISSUE_TEMPLATE/{bug_report,feature_request}.yml`. Everything is labeled `feedback` (plus `bug` / `enhancement`).
+
+### 2. Triage (who starts the agent)
+
+The agent (`.github/workflows/agent-implement.yml`) turns an issue into a PR. It starts in exactly two ways:
+
+- **Automatically** when the issue was opened by the maintainer (`@pbaer`) — you can just open an issue and the agent runs.
+- **Manually** for anyone else's issue: review it, and if it's worth doing, add the **`agent-go`** label. That's the dispatch signal. (This is deliberate — public feedback never auto-spends agent budget; you decide what gets worked.)
+
+The agent works on a branch `agent/issue-<n>`, implements the smallest fix, and opens a PR that `Closes #<n>`. It is required (via `CLAUDE.md`) to add deterministic tests and to run typecheck + tests + build before finishing. If a request conflicts with the project principles (human-games-only, no engine signal, CC0/no-TWIC), it comments and stops instead of implementing.
+
+### 3. Review loop (iterate until good)
+
+`.github/workflows/agent-iterate.yml` closes the loop:
+
+- Leave a review with **Request changes** or **Comment** on an `agent/*` PR → the agent reads the thread, pushes fixes, and replies. No `@claude` mention needed. (You can also post a plain PR comment mentioning `@claude` as an explicit nudge.)
+- **Approve** the PR → nothing re-triggers, so approval cleanly ends the loop.
+
+### 4. Approval gate (nothing merges without you)
+
+A ruleset on `master` requires a pull request with a **Code-Owner** approval (`.github/CODEOWNERS` → `@pbaer`). You are on the ruleset's **bypass list**, so you keep direct `git push` to `master`; the agent/app is **not**, so its PRs cannot merge without your approval. Merges to `master` under `viz/**` auto-deploy to GitHub Pages.
+
+### Validation & test-coverage policy (deterministic, no LLM)
+
+Every change the agent makes must be validated by tests that run **without an LLM or network** — for speed and cost. The harness:
+
+- `npm run typecheck` · `npm test` · `npm run build` — must all pass; the suite includes the PyTorch **forward-parity** assertions.
+- Component/UX tests use **jsdom + React Testing Library**; files named `*.dom.test.tsx` run in jsdom automatically, plain `*.test.ts` run in fast Node (see `vitest.config.ts`). Examples: `src/feedback/Feedback.dom.test.tsx`, `src/presentations/desktop/play/PlayUi.dom.test.tsx`.
+- `npm run test:coverage` reports coverage (v8). New/changed behavior is expected to be well-covered.
+
+The full agent contract — principles, required commands, and the coverage rule — lives in **`CLAUDE.md`** at the repo root. Setup (the `CLAUDE_CODE_OAUTH_TOKEN` secret, labels, and the `master` ruleset) is already in place.

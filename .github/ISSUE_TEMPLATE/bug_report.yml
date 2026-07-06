@@ -1,0 +1,35 @@
+name: 🐞 Bug report
+description: Something in the Neural Chess web tool is broken or behaves wrong.
+labels: ["bug", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Neural Chess. The in-app **Feedback** button
+        prefills most of this for you, but you can also file directly here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: e.g. After I castled kingside, the board stopped responding to clicks.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a new game as White
+        2. Play up to move 10
+        3. Castle kingside
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Model id / position (FEN) / browser. The Feedback button fills this automatically.
+      render: markdown
+    validations:
+      required: false

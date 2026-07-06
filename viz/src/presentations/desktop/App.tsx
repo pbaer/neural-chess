@@ -14,6 +14,7 @@ import { ValueGauge } from './play/ValueGauge.tsx';
 import { useGame } from './play/useGame.ts';
 import { ModelInspector } from './viz/ModelInspector.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
+import { FeedbackLink } from '../../feedback/Feedback.tsx';
 
 export function App() {
   const { store, client, capsuleUrl, ready, meta, error } = useGame();
@@ -36,15 +37,29 @@ export function App() {
       ) : (
         <div className="status">{error ?? 'Loading model…'}</div>
       )}
-      <Footer />
+      <Footer store={store} meta={meta} />
     </div>
   );
 }
 
 const REPO_URL = 'https://github.com/pbaer/neural-chess';
 
-/** Small, muted footer: license, third-party attribution, and a repo link. */
-function Footer() {
+/** Small, muted footer: license, third-party attribution, a repo link, and the
+ *  in-app feedback trigger (with live model/position context for bug reports). */
+function Footer({ store, meta }: { store: GameStore | null; meta: EngineMeta | null }) {
+  const getContext = () => {
+    const lines: string[] = ['**Environment**', ''];
+    if (meta) lines.push(`- Model: ${meta.modelId} · arch ${meta.arch} · ${meta.paramCount.toLocaleString()} params`);
+    if (store) {
+      const s = store.getState();
+      lines.push(`- Position (FEN): \`${s.fen}\``);
+      if (s.lastModelMove) lines.push(`- Last model move: ${s.lastModelMove.san} (${s.lastModelMove.uci})`);
+      lines.push(`- Move ${s.sanHistory.length}, status: ${s.status}`);
+    }
+    lines.push(`- Page: ${location.href}`);
+    lines.push(`- Browser: ${navigator.userAgent}`);
+    return lines.join('\n');
+  };
   return (
     <footer className="app-footer">
       <a href={`${REPO_URL}/blob/master/LICENSE`} target="_blank" rel="noopener noreferrer">
@@ -66,6 +81,8 @@ function Footer() {
       <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
         github.com/pbaer/neural-chess
       </a>
+      <span className="app-footer-sep" aria-hidden="true">·</span>
+      <FeedbackLink getContext={getContext} />
     </footer>
   );
 }

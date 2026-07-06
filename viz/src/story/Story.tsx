@@ -4,6 +4,7 @@
 // + inline SVG figures, no external assets. Responsive layout in story.css.
 
 import { useSyncExternalStore } from 'react';
+import { FeedbackLink } from '../feedback/Feedback.tsx';
 
 const BASE = import.meta.env.BASE_URL ?? '/';
 const PLAY_URL = `${BASE}`;
@@ -275,6 +276,8 @@ export function Story() {
         <a href={`${REPO_URL}/blob/master/LICENSE`} target="_blank" rel="noopener noreferrer">MIT © Peter Baer</a>
         <span className="story-footer-sep" aria-hidden="true">·</span>
         <a href={REPO_URL} target="_blank" rel="noopener noreferrer">github.com/pbaer/neural-chess</a>
+        <span className="story-footer-sep" aria-hidden="true">·</span>
+        <FeedbackLink />
       </footer>
     </div>
   );

@@ -1,0 +1,65 @@
+name: Agent — address PR feedback
+
+# When the maintainer leaves review feedback on an agent-authored PR, Claude Code
+# updates the PR branch to address it — looping until the maintainer approves.
+#
+# Two entry points:
+#   1. A submitted review (Request changes / Comment, NOT Approve) by @pbaer on a
+#      branch named `agent/*`. No @claude needed — leaving review feedback is the
+#      signal.
+#   2. A plain PR comment by @pbaer that mentions @claude (an explicit nudge).
+#
+# Approving a PR does not trigger the agent, so approval cleanly ends the loop.
+# The agent never merges; the `master` ruleset requires the maintainer's approval.
+
+on:
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+# One run per PR at a time.
+concurrency:
+  group: agent-pr-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  address:
+    if: >
+      (github.event_name == 'pull_request_review'
+        && github.event.review.user.login == 'pbaer'
+        && github.event.review.state != 'approved'
+        && startsWith(github.event.pull_request.head.ref, 'agent/'))
+      ||
+      (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request != null
+        && github.event.comment.user.login == 'pbaer'
+        && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            The maintainer left review feedback on this pull request. Read CLAUDE.md
+            at the repo root, then read the PR description, the review, and any
+            inline review comments, and push commits to this PR's branch that
+            address every point raised. Update or add deterministic tests for any
+            behavior you change. Before finishing, from `viz/` run `npm run
+            typecheck`, `npm test`, and `npm run build` and make sure they all pass.
+            Reply on the PR summarizing what you changed. Keep changes minimal. Do
+            NOT merge — the maintainer approves and merges.
+          claude_args: |
+            --max-turns 40
+            --model claude-sonnet-5

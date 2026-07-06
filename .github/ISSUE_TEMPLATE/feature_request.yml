@@ -1,0 +1,25 @@
+name: 💡 Feature request
+description: Suggest an improvement or new capability for the Neural Chess web tool.
+labels: ["enhancement", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Keep it focused on the in-browser tool (`viz/`).
+        Requests that would break the project's principles (human-games-only
+        training, no engine-derived signal) may be declined.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like?
+      description: Describe the feature and why it would help.
+      placeholder: e.g. Add a "flip board" button so I can play from Black's perspective.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or context
+      placeholder: Anything you've tried, or examples from other tools.
+    validations:
+      required: false

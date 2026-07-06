@@ -1,0 +1,176 @@
+/* Feedback widget styles — self-contained and theme-aware. Relies only on the CSS
+   custom properties that BOTH page stylesheets (styles.css, story.css) define, so
+   it renders correctly on the play page and the story page without either sheet
+   knowing about it. */
+
+/* Footer trigger — blends into the muted footer text on both pages. */
+.fb-link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+.fb-link:hover {
+  color: var(--text);
+  border-bottom-color: var(--line);
+}
+
+/* Overlay + modal */
+.fb-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.5);
+}
+.fb-modal {
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.fb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.fb-title {
+  font-size: 17px;
+  font-weight: 650;
+  margin: 0;
+}
+.fb-x {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+.fb-x:hover {
+  color: var(--text);
+}
+
+/* Type toggle */
+.fb-kind {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.fb-kind-btn {
+  flex: 1;
+  appearance: none;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.fb-kind-btn:hover {
+  color: var(--text);
+}
+.fb-kind-on {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft, var(--panel-2, var(--bg)));
+}
+
+/* Fields */
+.fb-field {
+  display: block;
+  margin-bottom: 12px;
+}
+.fb-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.fb-optional {
+  opacity: 0.8;
+  font-weight: 400;
+}
+.fb-input,
+.fb-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+.fb-textarea {
+  resize: vertical;
+  min-height: 84px;
+}
+.fb-input:focus,
+.fb-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.fb-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+/* Actions */
+.fb-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.fb-btn {
+  appearance: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  border: 1px solid var(--line);
+}
+.fb-btn-ghost {
+  background: none;
+  color: var(--muted);
+}
+.fb-btn-ghost:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.fb-btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.fb-btn-primary:hover {
+  filter: brightness(1.08);
+}
+.fb-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+}

@@ -1,0 +1,73 @@
+name: Agent — implement issue
+
+# Turns a feedback issue into a pull request using Claude Code.
+#
+# Auto-starts ONLY when the issue was opened by the maintainer (@pbaer). For
+# issues filed by anyone else (e.g. via the in-app Feedback button), the
+# maintainer triggers the agent manually by adding the `agent-go` label.
+#
+# The agent opens a PR but never merges — the `master` ruleset requires the
+# maintainer's Code-Owner approval (see .github/CODEOWNERS).
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+# One run per issue at a time.
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    # Auto-run for the maintainer's own new issues; otherwise require `agent-go`.
+    if: >
+      (github.event.action == 'opened' && github.event.issue.user.login == 'pbaer') ||
+      (github.event.action == 'labeled' && github.event.label.name == 'agent-go')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            A new issue was filed that you should resolve by opening a pull request.
+
+            Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+
+            ${{ github.event.issue.body }}
+
+            Read CLAUDE.md at the repo root first — it defines the project
+            principles, the required validation commands, and the test-coverage
+            rules. Then:
+            - Work on a new branch named `agent/issue-${{ github.event.issue.number }}`.
+            - Implement the smallest change that fully addresses the issue, matching
+              existing code conventions. Most changes live in `viz/`.
+            - MANDATORY: add or update deterministic tests covering the new/changed
+              behavior (UX changes → a `*.dom.test.tsx` component test; logic → a
+              Node `*.test.ts`). No LLM/network in tests. See the examples named in
+              CLAUDE.md.
+            - MANDATORY: from `viz/`, run `npm ci`, `npm run typecheck`, `npm test`,
+              and `npm run build`, and make sure they ALL pass before finishing. Do
+              not weaken the forward-parity tests.
+            - Respect the project's principles (human-games-only data, no
+              engine-derived signal, CC0 / no TWIC). If the request would violate
+              them, do NOT implement it — comment on the issue explaining why and stop.
+            - Open a pull request targeting `master`. The description should explain
+              the change, note the tests you added, and end with a line:
+              `Closes #${{ github.event.issue.number }}`.
+            - Do NOT merge. A human maintainer reviews and approves every PR.
+          # Swap to a stronger model (e.g. --model claude-opus-4-8) if a task needs it.
+          claude_args: |
+            --max-turns 40
+            --model claude-sonnet-5

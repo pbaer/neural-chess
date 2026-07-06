@@ -1,0 +1,5 @@
+# Every change to this repo requires review from the owner. Combined with the
+# `master` branch ruleset (require PR + require review from Code Owners), this
+# makes @pbaer the mandatory approver — nothing reaches master without it,
+# including PRs opened by the AI coding agent.
+* @pbaer
