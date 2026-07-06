@@ -6,8 +6,11 @@ name: Agent — implement issue
 # issues filed by anyone else (e.g. via the in-app Feedback button), the
 # maintainer triggers the agent manually by adding the `agent-go` label.
 #
-# The agent opens a PR but never merges — the `master` ruleset requires the
-# maintainer's Code-Owner approval (see .github/CODEOWNERS).
+# Division of labor: Claude ONLY edits files + runs the npm validation. The
+# branch/commit/push/PR is done deterministically in a plain workflow step with
+# explicit token auth — far more reliable than having the LLM drive git/gh (which
+# also wasted turns retrying failed pushes). The agent never merges: the `master`
+# ruleset requires the maintainer's Code-Owner approval (see .github/CODEOWNERS).
 
 on:
   issues:
@@ -17,7 +20,6 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  id-token: write
   actions: read
 
 # One run per issue at a time.
@@ -32,20 +34,23 @@ jobs:
       (github.event.action == 'opened' && github.event.issue.user.login == 'pbaer') ||
       (github.event.action == 'labeled' && github.event.label.name == 'agent-go')
     runs-on: ubuntu-latest
+    env:
+      ISSUE: ${{ github.event.issue.number }}
+      BRANCH: agent/issue-${{ github.event.issue.number }}
     steps:
-      # Full history + persisted credentials so the agent can branch and push.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: anthropics/claude-code-action@v1
+      - name: Implement with Claude
+        id: claude
+        uses: anthropics/claude-code-action@v1
         env:
-          # Lets the `gh` CLI (used by the agent to open the PR) authenticate.
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }} # only for the decline-and-comment path
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            A new issue was filed that you should resolve by opening a pull request.
+            A new issue was filed. Implement a fix in the working tree.
 
             Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
 
@@ -54,27 +59,55 @@ jobs:
             Read CLAUDE.md at the repo root first — it defines the project
             principles, the required validation commands, and the test-coverage
             rules. Then:
-            - Create and switch to a new branch: `git checkout -b agent/issue-${{ github.event.issue.number }}`.
             - Implement the smallest change that fully addresses the issue, matching
               existing code conventions. Most changes live in `viz/`.
-            - MANDATORY: add or update deterministic tests covering the new/changed
-              behavior (UX changes → a `*.dom.test.tsx` component test; logic → a
-              Node `*.test.ts`). No LLM/network in tests. See the examples named in
-              CLAUDE.md.
-            - MANDATORY: from `viz/`, run `npm ci`, `npm run typecheck`, `npm test`,
-              and `npm run build`, and make sure they ALL pass before finishing. Do
-              not weaken the forward-parity tests.
-            - Respect the project's principles (human-games-only data, no
-              engine-derived signal, CC0 / no TWIC). If the request would violate
-              them, do NOT implement it — comment on the issue explaining why and stop.
-            - Commit your work, push the branch (`git push -u origin HEAD`), then open
-              a PR with the gh CLI:
-              `gh pr create --base master --head agent/issue-${{ github.event.issue.number }} --title "<title>" --body "<what changed + tests added>\n\nCloses #${{ github.event.issue.number }}"`.
-            - Do NOT merge, and do NOT push to master. A human maintainer reviews and
-              approves every PR.
-          # git/gh/npm run through Bash, so it must be allowed (off by default).
+            - Add or update deterministic tests covering the new/changed behavior
+              (UX → a `*.dom.test.tsx` component test; logic → a Node `*.test.ts`).
+              No LLM/network in tests.
+            - Validate from `viz/`: run `npm ci` once, then `npm run typecheck`,
+              `npm test`, and `npm run build`. Fix any failures. Run each command
+              only as many times as you need — do not loop needlessly.
+            - Do NOT create a branch, commit, push, or open a PR — the workflow does
+              all of that automatically after you finish. Just leave your finished
+              changes in the working tree.
+            - If the request violates the project principles (human-games-only data,
+              no engine-derived signal, CC0 / no TWIC), make NO code changes and run
+              `gh issue comment ${{ github.event.issue.number }} --body "<why>"` to
+              explain, then stop.
+          # Bash is needed for npm; git/gh are handled by the workflow, not Claude.
           # Swap to a stronger model (e.g. --model claude-opus-4-8) if a task needs it.
           claude_args: |
             --allowedTools "Bash,Edit,MultiEdit,Write,Read,Glob,Grep,NotebookEdit,TodoWrite"
-            --max-turns 60
+            --max-turns 80
             --model claude-sonnet-5
+
+      - name: Open pull request from the agent's changes
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git add -A
+          # Nothing staged AND no commits ahead of master → agent declined / only commented.
+          if git diff --cached --quiet && [ "$(git rev-list --count origin/master..HEAD)" -eq 0 ]; then
+            echo "No file changes produced; skipping PR."
+            exit 0
+          fi
+          git config user.name "claude-agent[bot]"
+          git config user.email "claude-agent[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git diff --cached --quiet || git commit -m "Agent: address issue #$ISSUE"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "HEAD:$BRANCH"
+          # Draft if the agent step didn't finish cleanly (e.g. hit max turns), so it's flagged.
+          DRAFT=""
+          [ "${{ steps.claude.outcome }}" = "success" ] || DRAFT="--draft"
+          existing="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)"
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for $BRANCH; updated by the push above."
+          else
+            gh pr create $DRAFT --base master --head "$BRANCH" \
+              --title "Agent: ${{ github.event.issue.title }} (#$ISSUE)" \
+              --body "Automated fix for #$ISSUE by the Claude coding agent. Validation (typecheck/test/build) was run in the agent step. Review + approval required before merge.
+
+          Closes #$ISSUE"
+          fi

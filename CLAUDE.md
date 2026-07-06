@@ -77,8 +77,10 @@ Reviews will reject changes with new untested behavior.
 
 ## PR hygiene
 
-- Work on a branch named `agent/issue-<n>`; open a PR targeting `master` whose
-  description ends with `Closes #<n>`.
+- When running under the GitHub agent workflows, **do not run git or create the
+  branch/PR yourself** — just leave your finished, validated changes in the working
+  tree. The workflow commits, pushes to `agent/issue-<n>`, and opens/updates the PR
+  deterministically. (The only exception is the decline path: if the request
+  violates a principle, make no code changes and `gh issue comment` your reasoning.)
 - **Never merge.** A human maintainer (@pbaer) is a required Code-Owner reviewer on
-  `master`; every PR needs their approval. When they leave review feedback, address
-  every point, push to the same branch, and reply summarizing what changed.
+  `master`; every PR needs their approval before it can merge.

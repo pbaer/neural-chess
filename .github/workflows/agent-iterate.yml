@@ -9,8 +9,9 @@ name: Agent — address PR feedback
 #      signal.
 #   2. A plain PR comment by @pbaer that mentions @claude (an explicit nudge).
 #
-# Approving a PR does not trigger the agent, so approval cleanly ends the loop.
-# The agent never merges; the `master` ruleset requires the maintainer's approval.
+# As in agent-implement.yml, Claude only edits + validates; the workflow does the
+# commit/push deterministically. Approving a PR does not trigger the agent, so
+# approval cleanly ends the loop. The agent never merges.
 
 on:
   pull_request_review:
@@ -22,7 +23,6 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  id-token: write
   actions: read
 
 # One run per PR at a time.
@@ -46,30 +46,52 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
     steps:
-      # Full history + persisted credentials so the agent can push to the PR branch.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: anthropics/claude-code-action@v1
+      - name: Check out the PR branch
         env:
           GH_TOKEN: ${{ github.token }}
+        run: gh pr checkout "$PR_NUMBER"
+
+      - name: Address feedback with Claude
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }} # for reading the PR thread
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             The maintainer left review feedback on pull request #${{ env.PR_NUMBER }}.
             Read CLAUDE.md at the repo root first. Then:
-            - Check out the PR branch: `gh pr checkout ${{ env.PR_NUMBER }}`.
-            - Read the PR description and the review (including inline comments) with
+            - Read the PR description and the review, including inline comments, with
               `gh pr view ${{ env.PR_NUMBER }} --comments`, and address every point.
             - Update or add deterministic tests for any behavior you change.
-            - From `viz/`, run `npm run typecheck`, `npm test`, and `npm run build`
-              and make sure they all pass.
-            - Commit and push to the same branch (`git push`). Then reply with
-              `gh pr comment ${{ env.PR_NUMBER }} --body "<summary of changes>"`.
-            - Keep changes minimal. Do NOT merge — the maintainer approves and merges.
-          # git/gh/npm run through Bash, so it must be allowed (off by default).
+            - Validate from `viz/`: `npm ci`, `npm run typecheck`, `npm test`, and
+              `npm run build`. Fix any failures.
+            - Do NOT commit, push, or merge — the workflow commits and pushes your
+              working-tree changes to the PR branch automatically. Just leave your
+              finished changes in the working tree.
           claude_args: |
             --allowedTools "Bash,Edit,MultiEdit,Write,Read,Glob,Grep,NotebookEdit,TodoWrite"
-            --max-turns 60
+            --max-turns 80
             --model claude-sonnet-5
+
+      - name: Push updates to the PR branch and reply
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet && [ "$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)" -eq 0 ]; then
+            echo "No changes to push."
+            exit 0
+          fi
+          git config user.name "claude-agent[bot]"
+          git config user.email "claude-agent[bot]@users.noreply.github.com"
+          git diff --cached --quiet || git commit -m "Agent: address review feedback on #$PR_NUMBER"
+          BR="$(git rev-parse --abbrev-ref HEAD)"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "HEAD:$BR"
+          gh pr comment "$PR_NUMBER" --body "Addressed the review feedback and pushed updates to \`$BR\`. Validation (typecheck/test/build) was run in the agent step."
