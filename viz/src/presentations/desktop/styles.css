@@ -422,11 +422,43 @@ body {
   display: grid;
   grid-template-columns: 36px 1fr 1fr;
   gap: 6px;
-  padding: 2px 0;
+  padding: 3px 0;
+  align-items: start;
 }
 
 .move-num {
   color: var(--muted);
+}
+
+/* Each move cell stacks its SAN over the model's value-head badge (when present). */
+.move-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Per-move value badge: a small centered White(+)/Black(−) bar + signed number. */
+.move-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.move-value-bar {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  min-width: 0;
+  background: var(--track);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.move-value-num {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .move-empty {

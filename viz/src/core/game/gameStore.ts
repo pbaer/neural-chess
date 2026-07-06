@@ -39,6 +39,19 @@ export interface ModelMoveInfo {
   policyProb: number;
 }
 
+/**
+ * One value-head reading, recorded each time the model moves, re-expressed in a
+ * fixed frame: + favors White, − favors Black (unlike ModelMoveInfo.value, which
+ * is from the side-to-move's perspective). Used to plot how the model's judged
+ * White-vs-Black advantage shifted over the game in the move list.
+ */
+export interface ValueSample {
+  /** Half-move index (1 = after White's 1st move); indexes sanHistory[ply-1]. */
+  ply: number;
+  /** Value head in [-1,1] re-framed to White(+)/Black(−). */
+  whiteValue: number;
+}
+
 /** One ranked legal move the model predicts (suggestion / preview / flash list). */
 export interface ModelCandidate {
   from: string; // algebraic, e.g. 'g1'
@@ -122,6 +135,12 @@ export interface GameState {
   lastMove: { fromIdx: number; toIdx: number } | null;
   /** Details of the model's most recent move (for the value/move readout). */
   lastModelMove: ModelMoveInfo | null;
+  /**
+   * Value-head reading per model move so far, in a fixed White(+)/Black(−) frame
+   * (see ValueSample). One entry is appended each time the model moves; shown in
+   * the move list as the history of the model's advantage judgement.
+   */
+  valueHistory: ValueSample[];
   /**
    * Move-assistant toggle. When on, the model is run on the HUMAN's position each
    * of the human's turns and its top moves for the human's own side are surfaced
@@ -363,7 +382,17 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         value,
         policyProb: prob,
       };
-      commit({ lastModelMove: info, flashMove: null, previewMoves: null });
+      // Record the value head in a fixed White(+)/Black(−) frame. `value` is from
+      // the side-to-move's (the model's) perspective, so +1 means White ahead iff
+      // the model played White.
+      const modelColor: Color = get().humanColor === 'w' ? 'b' : 'w';
+      const sample: ValueSample = { ply: chess.history().length, whiteValue: modelColor === 'w' ? value : -value };
+      commit({
+        lastModelMove: info,
+        valueHistory: [...get().valueHistory, sample],
+        flashMove: null,
+        previewMoves: null,
+      });
       persist();
       // Back to the human → surface move-assistant suggestions if enabled.
       refreshSuggestions();
@@ -551,7 +580,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       lastMove = null;
       suggestToken++; // drop any pending suggestion reply
       recordPosition();
-      commit({ humanColor, lastModelMove: null, suggestions: null, search: null, flashMove: null, previewMoves: null });
+      commit({ humanColor, lastModelMove: null, valueHistory: [], suggestions: null, search: null, flashMove: null, previewMoves: null });
       persist();
       if (!chess.isGameOver() && chess.turn() !== humanColor) void runModel();
       else refreshSuggestions(); // human to move → assistant suggestions if enabled
@@ -581,6 +610,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       inCheck: chess.inCheck(),
       lastMove,
       lastModelMove: null,
+      valueHistory: [],
       assist: restored.assist,
       variety: restored.variety,
       suggestions: null,
@@ -673,7 +703,9 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         epSquare = last ? epTargetAfterMove(last) : epTargetFromFen(chess.fen());
         lastMove = last ? { fromIdx: algToIdx(last.from), toIdx: algToIdx(last.to) } : null;
         suggestToken++;
-        commit({ lastModelMove: null, suggestions: null, search: null, flashMove: null, previewMoves: null });
+        // Drop value readings for plies that no longer exist after the undo.
+        const kept = get().valueHistory.filter((v) => v.ply <= chess.history().length);
+        commit({ lastModelMove: null, valueHistory: kept, suggestions: null, search: null, flashMove: null, previewMoves: null });
         persist();
         refreshSuggestions(); // back on the human's turn → suggestions if enabled
       },

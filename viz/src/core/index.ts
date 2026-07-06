@@ -55,7 +55,7 @@ export {
   MCTS_DEFAULT_CUTOFF,
   DEFAULT_VARIETY,
 } from './game/gameStore.ts';
-export type { GameStore, GameState, GameStatus, ModelMoveInfo, ModelCandidate, PromotionPiece, MctsSettings } from './game/gameStore.ts';
+export type { GameStore, GameState, GameStatus, ModelMoveInfo, ModelCandidate, ValueSample, PromotionPiece, MctsSettings } from './game/gameStore.ts';
 export {
   algToIdx,
   idxToAlg,

@@ -31,6 +31,31 @@ describe('MoveHistory', () => {
     expect(within(rows[1]).getByText('2.')).toBeInTheDocument();
     expect(within(rows[1]).getByText('Nf3')).toBeInTheDocument();
   });
+
+  it('shows the model value head per move at its ply, signed in the White(+)/Black(−) frame', () => {
+    // ply 2 (black's 1st move) = +0.30 → White ahead; ply 4 = -0.55 → Black ahead.
+    render(
+      <MoveHistory
+        sanHistory={['e4', 'e5', 'Nf3', 'Nc6']}
+        valueHistory={[
+          { ply: 2, whiteValue: 0.3 },
+          { ply: 4, whiteValue: -0.55 },
+        ]}
+      />,
+    );
+    expect(screen.getByText('+0.30')).toBeInTheDocument();
+    expect(screen.getByText('-0.55')).toBeInTheDocument();
+    // A move without a reading shows no value badge.
+    expect(screen.queryByText('+0.00')).not.toBeInTheDocument();
+    // The badge carries a descriptive tooltip naming the favored side.
+    expect(screen.getByTitle('Value head: +0.30 (White better)')).toBeInTheDocument();
+    expect(screen.getByTitle('Value head: -0.55 (Black better)')).toBeInTheDocument();
+  });
+
+  it('omits value badges entirely when no value history is provided', () => {
+    render(<MoveHistory sanHistory={['e4', 'e5']} />);
+    expect(document.querySelector('.move-value')).toBeNull();
+  });
 });
 
 describe('ValueGauge', () => {
