@@ -43,23 +43,33 @@ jobs:
         && github.event.comment.user.login == 'pbaer'
         && contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
     steps:
+      # Full history + persisted credentials so the agent can push to the PR branch.
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            The maintainer left review feedback on this pull request. Read CLAUDE.md
-            at the repo root, then read the PR description, the review, and any
-            inline review comments, and push commits to this PR's branch that
-            address every point raised. Update or add deterministic tests for any
-            behavior you change. Before finishing, from `viz/` run `npm run
-            typecheck`, `npm test`, and `npm run build` and make sure they all pass.
-            Reply on the PR summarizing what you changed. Keep changes minimal. Do
-            NOT merge — the maintainer approves and merges.
+            The maintainer left review feedback on pull request #${{ env.PR_NUMBER }}.
+            Read CLAUDE.md at the repo root first. Then:
+            - Check out the PR branch: `gh pr checkout ${{ env.PR_NUMBER }}`.
+            - Read the PR description and the review (including inline comments) with
+              `gh pr view ${{ env.PR_NUMBER }} --comments`, and address every point.
+            - Update or add deterministic tests for any behavior you change.
+            - From `viz/`, run `npm run typecheck`, `npm test`, and `npm run build`
+              and make sure they all pass.
+            - Commit and push to the same branch (`git push`). Then reply with
+              `gh pr comment ${{ env.PR_NUMBER }} --body "<summary of changes>"`.
+            - Keep changes minimal. Do NOT merge — the maintainer approves and merges.
+          # git/gh/npm run through Bash, so it must be allowed (off by default).
           claude_args: |
-            --max-turns 40
+            --allowedTools "Bash,Edit,MultiEdit,Write,Read,Glob,Grep,NotebookEdit,TodoWrite"
+            --max-turns 60
             --model claude-sonnet-5

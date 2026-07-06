@@ -33,11 +33,15 @@ jobs:
       (github.event.action == 'labeled' && github.event.label.name == 'agent-go')
     runs-on: ubuntu-latest
     steps:
+      # Full history + persisted credentials so the agent can branch and push.
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
+        env:
+          # Lets the `gh` CLI (used by the agent to open the PR) authenticate.
+          GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -50,7 +54,7 @@ jobs:
             Read CLAUDE.md at the repo root first — it defines the project
             principles, the required validation commands, and the test-coverage
             rules. Then:
-            - Work on a new branch named `agent/issue-${{ github.event.issue.number }}`.
+            - Create and switch to a new branch: `git checkout -b agent/issue-${{ github.event.issue.number }}`.
             - Implement the smallest change that fully addresses the issue, matching
               existing code conventions. Most changes live in `viz/`.
             - MANDATORY: add or update deterministic tests covering the new/changed
@@ -63,11 +67,14 @@ jobs:
             - Respect the project's principles (human-games-only data, no
               engine-derived signal, CC0 / no TWIC). If the request would violate
               them, do NOT implement it — comment on the issue explaining why and stop.
-            - Open a pull request targeting `master`. The description should explain
-              the change, note the tests you added, and end with a line:
-              `Closes #${{ github.event.issue.number }}`.
-            - Do NOT merge. A human maintainer reviews and approves every PR.
+            - Commit your work, push the branch (`git push -u origin HEAD`), then open
+              a PR with the gh CLI:
+              `gh pr create --base master --head agent/issue-${{ github.event.issue.number }} --title "<title>" --body "<what changed + tests added>\n\nCloses #${{ github.event.issue.number }}"`.
+            - Do NOT merge, and do NOT push to master. A human maintainer reviews and
+              approves every PR.
+          # git/gh/npm run through Bash, so it must be allowed (off by default).
           # Swap to a stronger model (e.g. --model claude-opus-4-8) if a task needs it.
           claude_args: |
-            --max-turns 40
+            --allowedTools "Bash,Edit,MultiEdit,Write,Read,Glob,Grep,NotebookEdit,TodoWrite"
+            --max-turns 60
             --model claude-sonnet-5
