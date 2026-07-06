@@ -206,7 +206,7 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
           )}
         </div>
 
-        <MoveHistory sanHistory={state.sanHistory} />
+        <MoveHistory sanHistory={state.sanHistory} valueHistory={state.valueHistory} />
 
         {meta && (
           <div className="model-info">
