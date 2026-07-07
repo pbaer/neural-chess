@@ -190,7 +190,13 @@ function GameView({ store, client, capsuleUrl, ready, meta, error }: GameViewPro
           />
         )}
 
-        <ValueGauge model={state.lastModelMove} modelColor={state.humanColor === 'w' ? 'b' : 'w'} />
+        <ValueGauge
+          whiteValue={
+            state.valueHistory.length > 0
+              ? state.valueHistory[state.valueHistory.length - 1].whiteValue
+              : null
+          }
+        />
 
         <div className="model-move">
           <div className="panel-title">Model move</div>

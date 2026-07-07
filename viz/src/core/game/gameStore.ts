@@ -233,6 +233,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
     assist: false,
     variety: DEFAULT_VARIETY,
     mcts: { ...MCTS_DEFAULTS } as MctsSettings,
+    valueHistory: [] as ValueSample[],
   };
   const persisted = loadPersisted(restoreDefaults);
   const restored = { ...restoreDefaults };
@@ -246,6 +247,11 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       restored.assist = persisted.assist;
       restored.variety = persisted.variety;
       restored.mcts = persisted.mcts;
+      // Keep only readings for plies that still exist in the replayed game (guards
+      // against a hand-edited / truncated blob) — same invariant undo maintains.
+      restored.valueHistory = persisted.valueHistory.filter(
+        (v) => v.ply >= 1 && v.ply <= chess.history().length,
+      );
       const verbose = chess.history({ verbose: true });
       const lastV = verbose[verbose.length - 1];
       lastMove = lastV ? { fromIdx: algToIdx(lastV.from), toIdx: algToIdx(lastV.to) } : null;
@@ -307,6 +313,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
         assist: get().assist,
         variety: get().variety,
         mcts: { ...get().mcts },
+        valueHistory: get().valueHistory,
       });
     }
 
@@ -610,7 +617,7 @@ export function createGameStore(engine: EngineClient, initialHumanColor: Color =
       inCheck: chess.inCheck(),
       lastMove,
       lastModelMove: null,
-      valueHistory: [],
+      valueHistory: restored.valueHistory,
       assist: restored.assist,
       variety: restored.variety,
       suggestions: null,

@@ -6,6 +6,7 @@ const D: RestoreDefaults = {
   assist: false,
   variety: 0.5,
   mcts: { enabled: false, sims: 100, cPuct: 1.5, cutoffThreshold: 0.7 },
+  valueHistory: [],
 };
 
 describe('parsePersisted (forward/backward compatibility contract)', () => {
@@ -18,6 +19,7 @@ describe('parsePersisted (forward/backward compatibility contract)', () => {
       assist: true,
       variety: 0.25,
       mcts: { enabled: true, sims: 200, cPuct: 2.0, cutoffThreshold: 0.8 },
+      valueHistory: [{ ply: 1, whiteValue: 0.3 }, { ply: 2, whiteValue: -0.15 }],
     };
     expect(parsePersisted(blob, D)).toEqual({
       startFen: null,
@@ -26,6 +28,7 @@ describe('parsePersisted (forward/backward compatibility contract)', () => {
       assist: true,
       variety: 0.25,
       mcts: { enabled: true, sims: 200, cPuct: 2.0, cutoffThreshold: 0.8 },
+      valueHistory: [{ ply: 1, whiteValue: 0.3 }, { ply: 2, whiteValue: -0.15 }],
     });
   });
 
@@ -38,6 +41,37 @@ describe('parsePersisted (forward/backward compatibility contract)', () => {
     expect(r!.assist).toBe(D.assist);
     expect(r!.variety).toBe(D.variety);
     expect(r!.mcts).toEqual(D.mcts);
+    expect(r!.valueHistory).toEqual([]); // absent → default (empty)
+  });
+
+  it('restores the value-head history (current + historical readings)', () => {
+    const r = parsePersisted(
+      { moves: [], valueHistory: [{ ply: 1, whiteValue: 0.42 }, { ply: 3, whiteValue: -0.7 }] },
+      D,
+    );
+    expect(r!.valueHistory).toEqual([{ ply: 1, whiteValue: 0.42 }, { ply: 3, whiteValue: -0.7 }]);
+  });
+
+  it('drops malformed value-head entries but keeps the well-formed ones', () => {
+    const r = parsePersisted(
+      {
+        moves: [],
+        valueHistory: [
+          { ply: 1, whiteValue: 0.5 },
+          { ply: 'x', whiteValue: 0.1 }, // bad ply
+          { ply: 2, whiteValue: 'nope' }, // bad value
+          { ply: 3, whiteValue: NaN }, // non-finite
+          null,
+          { ply: 4, whiteValue: -0.2 },
+        ],
+      },
+      D,
+    );
+    expect(r!.valueHistory).toEqual([{ ply: 1, whiteValue: 0.5 }, { ply: 4, whiteValue: -0.2 }]);
+  });
+
+  it('defaults value history when the field is not an array', () => {
+    expect(parsePersisted({ moves: [], valueHistory: 'nope' }, D)!.valueHistory).toEqual([]);
   });
 
   it('ignores unknown/extra fields (newer blob, same schema)', () => {
