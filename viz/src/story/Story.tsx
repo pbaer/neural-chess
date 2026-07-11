@@ -75,7 +75,7 @@ export function Story() {
             A neural network only does arithmetic, so the first job is turning a chessboard into numbers. The
             position is fed in as a stack of small 8&times;8 grids — one grid marking where the pawns are, one for
             the knights, and so on, plus a few for things like castling rights and whose turn it is. Everything in
-            that stack is just what you could write down by looking; no judgments, only facts.
+            that input stack is just what you could write down by looking; no judgments, only facts.
           </p>
           <Figure caption="Every move: the board becomes numbers, flows through the network, and comes out as two things — a ranked list of moves, and a single &ldquo;who&rsquo;s winning&rdquo; score.">
             <BoardToMove />
@@ -96,7 +96,7 @@ export function Story() {
             lessons came from the things that <em>didn&rsquo;t</em> work.
           </p>
 
-          <Figure caption="Five generations, each answering a question the last one raised.">
+          <Figure>
             <JourneyTimeline />
           </Figure>
 
@@ -197,8 +197,8 @@ export function Story() {
           <h3 className="story-h3">All on one desktop machine</h3>
           <p>
             None of this needed a data center. Every model and experiment in this story was trained on a{' '}
-            <strong>single consumer graphics card</strong> — an NVIDIA RTX 4080 Super, the kind of GPU a PC gamer
-            might have, with 16&nbsp;GB of memory. The largest models took a few hours for each pass through the
+            <strong>single consumer graphics card</strong> — an NVIDIA RTX 4080 Super, a typical PC gamer
+            GPU card, with 16&nbsp;GB of memory. The largest models took a few hours for each pass through the
             millions of games; the tiny one you&rsquo;re playing trains from scratch in about an hour. A big part
             of the project was finding tricks to make the training fast enough to actually iterate on a setup like
             that — packing the whole dataset into memory so the graphics card never waits on the disk, for
@@ -256,7 +256,7 @@ export function Story() {
           </ul>
           <p>
             A tiny bundle of numbers, taught only by watching people play, that you can both <em>beat</em> and{' '}
-            <em>look inside</em>. Go give it a game.
+            <em>look inside</em>. Give it a try!
           </p>
           <p className="story-cta">
             <a className="story-cta-link" href={PLAY_URL}>Play Neural Chess →</a>
