@@ -5,13 +5,8 @@
 // serve as the pattern for testing the play UI's rendering logic.
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { ModelMoveInfo } from '../../../core/index.ts';
 import { MoveHistory } from './MoveHistory.tsx';
 import { ValueGauge } from './ValueGauge.tsx';
-
-function modelMove(value: number): ModelMoveInfo {
-  return { uci: 'e2e4', san: 'e4', fromIdx: 12, toIdx: 28, value, policyProb: 0.5 };
-}
 
 describe('MoveHistory', () => {
   it('shows the empty state with no moves', () => {
@@ -59,19 +54,19 @@ describe('MoveHistory', () => {
 });
 
 describe('ValueGauge', () => {
-  it('shows an em dash when the model has not moved', () => {
-    render(<ValueGauge model={null} modelColor="w" />);
+  it('shows an em dash when the model has not moved (null value)', () => {
+    render(<ValueGauge whiteValue={null} />);
     expect(screen.getByText('—')).toBeInTheDocument();
   });
 
-  it('re-frames a side-to-move value into White(+)/Black(−)', () => {
-    // Model played as White with +0.60 → White is ahead → "+0.60".
-    const { unmount } = render(<ValueGauge model={modelMove(0.6)} modelColor="w" />);
+  it('renders the White-framed value it is handed', () => {
+    // +0.60 → White is ahead → "+0.60".
+    const { unmount } = render(<ValueGauge whiteValue={0.6} />);
     expect(screen.getByText('+0.60')).toBeInTheDocument();
     unmount();
 
-    // Same raw +0.60 but the model played Black → White is behind → "-0.60".
-    render(<ValueGauge model={modelMove(0.6)} modelColor="b" />);
+    // −0.60 → White is behind → "-0.60".
+    render(<ValueGauge whiteValue={-0.6} />);
     expect(screen.getByText('-0.60')).toBeInTheDocument();
   });
 });

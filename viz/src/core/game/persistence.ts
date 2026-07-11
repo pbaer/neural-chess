@@ -28,7 +28,7 @@
 // -tested directly in persistence.test.ts. Keep those tests green when evolving.
 
 import type { Color } from '../engine/index.ts';
-import type { MctsSettings } from './gameStore.ts';
+import type { MctsSettings, ValueSample } from './gameStore.ts';
 
 const KEY = 'neural-chess:game';
 /** Bump ONLY for a breaking change to the CORE { startFen, moves }. */
@@ -49,6 +49,9 @@ export interface PersistedGame {
   assist: boolean;
   variety: number;
   mcts: MctsSettings;
+  /** Value-head readings (White-framed) per model move — the current + historical
+   *  value shown in the gauge and move list. Restored so they survive a refresh. */
+  valueHistory: ValueSample[];
 }
 
 /** Defaults the caller supplies so settings fall back cleanly (avoids a runtime
@@ -58,6 +61,7 @@ export interface RestoreDefaults {
   assist: boolean;
   variety: number;
   mcts: MctsSettings;
+  valueHistory: ValueSample[];
 }
 
 /** localStorage if usable, else null (node/SSR, private mode, sandboxed iframe). */
@@ -112,7 +116,26 @@ export function parsePersisted(o: unknown, d: RestoreDefaults): PersistedGame | 
       cPuct: num(mctsIn.cPuct, d.mcts.cPuct),
       cutoffThreshold: num(mctsIn.cutoffThreshold, d.mcts.cutoffThreshold),
     },
+    valueHistory: parseValueHistory(r.valueHistory, d.valueHistory),
   };
+}
+
+/** Validate an OPTIONAL valueHistory array: keep only well-formed {ply, whiteValue}
+ *  entries; fall back to the default when the field is absent/not an array. */
+function parseValueHistory(x: unknown, fallback: ValueSample[]): ValueSample[] {
+  if (!Array.isArray(x)) return fallback;
+  const out: ValueSample[] = [];
+  for (const v of x) {
+    if (!v || typeof v !== 'object') continue;
+    const vv = v as Record<string, unknown>;
+    if (
+      typeof vv.ply === 'number' && Number.isFinite(vv.ply) &&
+      typeof vv.whiteValue === 'number' && Number.isFinite(vv.whiteValue)
+    ) {
+      out.push({ ply: vv.ply, whiteValue: vv.whiteValue });
+    }
+  }
+  return out;
 }
 
 /** Load + validate the saved game, or null if none / unusable. */
