@@ -161,6 +161,10 @@ jobs:
           gh workflow run deploy.yml --ref master
           echo "Shipped issue #${ISSUE} (${TITLE}) to master and triggered deploy."
 
+          # Resolve the issue (no PR to auto-close it for us).
+          gh issue close "$ISSUE" --reason completed \
+            --comment "Shipped to \`master\` in $(git rev-parse --short HEAD) (\"${TITLE}\") and deploying now. If it's not right, reopen or file a new issue."
+
       - name: Comment on the issue if the agent did not ship
         if: ${{ failure() }}
         env:
