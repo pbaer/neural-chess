@@ -8,7 +8,7 @@
 // GitHub in a new tab; the reporter submits under their own account. If the issue
 // author is the maintainer, a workflow auto-starts the coding agent (see
 // .github/workflows/agent-implement.yml); otherwise the maintainer triggers it
-// manually with the `agent-go` label.
+// manually via the workflow's Run-workflow (workflow_dispatch) button.
 
 import { useEffect, useState } from 'react';
 import './feedback.css';
