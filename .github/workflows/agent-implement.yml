@@ -113,6 +113,19 @@ jobs:
           path: ${{ runner.temp }}/claude-execution-output.json
           if-no-files-found: ignore
 
+      # The action can exit 0 even when the model call failed (e.g. an expired
+      # CLAUDE_CODE_OAUTH_TOKEN → "401 Invalid authentication credentials"), which
+      # would otherwise pass silently as a no-op. Fail loudly instead.
+      - name: Fail if Claude execution errored
+        if: ${{ !cancelled() }}
+        run: |
+          f="${{ runner.temp }}/claude-execution-output.json"
+          if [ -f "$f" ] && grep -q '"is_error": *true' "$f"; then
+            echo "::error::Claude execution failed (see transcript). Common cause: expired CLAUDE_CODE_OAUTH_TOKEN — refresh it with 'claude setup-token' and update the repo secret."
+            grep -o '"result": *"[^"]*"' "$f" | head -1 || true
+            exit 1
+          fi
+
       - name: Validate, commit to master, and deploy
         if: ${{ steps.claude.outcome == 'success' }}
         env:
