@@ -69,6 +69,30 @@ describe('MoveHistory', () => {
     expect(within(blackCell as HTMLElement).getByText('-0.40')).toBeInTheDocument();
   });
 
+  it('renders the value badge as the trailing element of its cell so it aligns to the right edge', () => {
+    // Alignment ("same x for all rows") relies on the badge being the last child of the
+    // equal-width move cell, so margin-left:auto pins it flush right no matter how long the SAN is.
+    // "Qxd8+" (5 chars) and "e5" (2 chars) must still leave the badge in the same trailing slot.
+    render(
+      <MoveHistory
+        sanHistory={['Qxd8+', 'e5']}
+        valueHistory={[
+          { ply: 1, whiteValue: 0.12 },
+          { ply: 2, whiteValue: -0.4 },
+        ]}
+      />,
+    );
+    const longCell = screen.getByText('Qxd8+').closest('.move-cell') as HTMLElement;
+    const shortCell = screen.getByText('e5').closest('.move-cell') as HTMLElement;
+    // In both the long-SAN and short-SAN cell the value badge is the final child.
+    expect(longCell.lastElementChild).toHaveClass('move-value');
+    expect(shortCell.lastElementChild).toHaveClass('move-value');
+    // The signed number is fixed-width (sign + one digit + "." + two decimals), so with the
+    // badge right-aligned the bar's left edge lines up across rows too.
+    expect(screen.getByText('+0.12').textContent).toHaveLength(5);
+    expect(screen.getByText('-0.40').textContent).toHaveLength(5);
+  });
+
   it('omits value badges entirely when no value history is provided', () => {
     render(<MoveHistory sanHistory={['e4', 'e5']} />);
     expect(document.querySelector('.move-value')).toBeNull();

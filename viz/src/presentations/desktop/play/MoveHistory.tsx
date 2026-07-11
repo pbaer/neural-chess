@@ -25,7 +25,9 @@ function MoveValue({ whiteValue }: { whiteValue: number }) {
   );
 }
 
-/** One SAN cell (may be empty) with its value badge inline on the same row when the model has one. */
+/** One SAN cell (may be empty) with its value badge inline on the same row when the model has one.
+ *  The badge is always the trailing element of the cell, so CSS (margin-left:auto) can pin it to the
+ *  cell's right edge — every row's badge then lands at the same x regardless of the SAN's length. */
 function MoveCell({ san, whiteValue }: { san: string; whiteValue?: number }) {
   if (!san) return <span className="move-cell" />;
   return (

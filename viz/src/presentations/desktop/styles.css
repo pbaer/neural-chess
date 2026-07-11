@@ -446,11 +446,15 @@ body {
   flex: 0 0 auto;
 }
 
-/* Per-move value badge: a small centered White(+)/Black(−) bar + signed number. */
+/* Per-move value badge: a small centered White(+)/Black(−) bar + signed number.
+   margin-left:auto pins it to the right edge of its (equal-width 1fr) move column,
+   so every badge lands at the same x across rows regardless of how many characters
+   the SAN took — the bar chart reads as one clean vertical column. */
 .move-value {
   display: flex;
   align-items: center;
   gap: 5px;
+  margin-left: auto;
 }
 
 .move-value-bar {
