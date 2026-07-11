@@ -107,7 +107,7 @@ export class Capsule {
   }
 }
 
-export function validateManifest(m: CapsuleManifest): void {
+function validateManifest(m: CapsuleManifest): void {
   if (typeof m.capsule_version !== 'number') {
     throw new Error('Capsule manifest missing numeric "capsule_version".');
   }

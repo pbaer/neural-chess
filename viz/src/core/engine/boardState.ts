@@ -37,21 +37,3 @@ export interface BoardState {
   pieceTypeAt(square: number): PieceType | null;
 }
 
-/** python-chess piece-type integer codes (PAWN=1 .. KING=6). Used for promotions. */
-export const PIECE_TYPE_INT: Record<PieceType, number> = {
-  p: 1,
-  n: 2,
-  b: 3,
-  r: 4,
-  q: 5,
-  k: 6,
-};
-
-export const PIECE_TYPE_FROM_INT: Record<number, PieceType> = {
-  1: 'p',
-  2: 'n',
-  3: 'b',
-  4: 'r',
-  5: 'q',
-  6: 'k',
-};

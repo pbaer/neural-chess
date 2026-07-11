@@ -1,7 +1,6 @@
 // Heatmap — a hand-rolled <canvas> matrix renderer (no charting lib). Paints one
-// cell per matrix entry with the chosen colormap, reports hover/click cells (so a
-// caller can reach a single scalar), and can outline a selected cell + arbitrary
-// highlighted cells (e.g. the chosen move's square). Crisp at any DPR.
+// cell per matrix entry with the chosen colormap and reports hover cells (so a
+// caller can reach a single scalar). Crisp at any DPR.
 
 import { useEffect, useMemo, useRef } from 'react';
 import { diverging, rangeOf, rgbCss, sequential, type RGB } from './colormap.ts';
@@ -22,7 +21,6 @@ export interface HeatmapProps {
   range?: [number, number];
   /** Target on-screen size of the longer axis, in px (default 280). */
   sizePx?: number;
-  selected?: { r: number; c: number } | null;
   /** Reserve a gutter outside the grid for an arrow that points at one row/col
    *  (e.g. the board square a companion grid is hovering). 'col' = top gutter,
    *  'row' = left gutter. The gutter is reserved whenever this is set, so the
@@ -30,10 +28,7 @@ export interface HeatmapProps {
   arrowAxis?: 'row' | 'col';
   /** Which row/col index the arrow points at (null = none drawn this frame). */
   arrowIndex?: number | null;
-  /** Cells to outline (e.g. board squares of interest). */
-  isHighlighted?: (r: number, c: number) => boolean;
   onHover?: (cell: Cell | null) => void;
-  onSelect?: (cell: Cell) => void;
   /** Flip the row axis so row 0 paints at the bottom (board-style). */
   flipY?: boolean;
   ariaLabel?: string;
@@ -49,7 +44,7 @@ export const HEATMAP_GUTTER = 14;
 const GUTTER = HEATMAP_GUTTER;
 
 export function Heatmap(props: HeatmapProps) {
-  const { data, rows, cols, selected, arrowAxis, arrowIndex, isHighlighted, onHover, onSelect, flipY = false, ariaLabel } = props;
+  const { data, rows, cols, arrowAxis, arrowIndex, onHover, flipY = false, ariaLabel } = props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const mode = props.mode ?? (rangeOf(data)[0] < -1e-9 ? 'diverging' : 'sequential');
@@ -103,22 +98,6 @@ export function Heatmap(props: HeatmapProps) {
         ctx.stroke();
       }
     }
-    // Highlighted cells.
-    if (isHighlighted) {
-      ctx.strokeStyle = '#7ec4ff';
-      ctx.lineWidth = 2;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          if (isHighlighted(r, c)) ctx.strokeRect(padLeft + c * cell + 1, padTop + paintRow(r) * cell + 1, cell - 2, cell - 2);
-        }
-      }
-    }
-    // Selected cell.
-    if (selected) {
-      ctx.strokeStyle = '#ffd166';
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(padLeft + selected.c * cell + 1, padTop + paintRow(selected.r) * cell + 1, cell - 2, cell - 2);
-    }
     // Arrow in the reserved gutter, pointing at a whole row/col from outside the
     // grid (so a thin line isn't swamped by an on-cell outline).
     if (arrowAxis && arrowIndex != null && arrowIndex >= 0 && arrowIndex < (arrowAxis === 'col' ? cols : rows)) {
@@ -142,7 +121,7 @@ export function Heatmap(props: HeatmapProps) {
         ctx.fill();
       }
     }
-  }, [data, rows, cols, cell, wPx, hPx, padTop, padLeft, gridW, gridH, mode, range, selected, arrowAxis, arrowIndex, isHighlighted, paintRow]);
+  }, [data, rows, cols, cell, wPx, hPx, padTop, padLeft, gridW, gridH, mode, range, arrowAxis, arrowIndex, paintRow]);
 
   function cellAt(e: React.MouseEvent): Cell | null {
     const c = Math.floor((e.nativeEvent.offsetX - padLeft) / cell);
@@ -157,10 +136,9 @@ export function Heatmap(props: HeatmapProps) {
       ref={canvasRef}
       role="img"
       aria-label={ariaLabel ?? `${rows}×${cols} heatmap`}
-      style={{ width: wPx, height: hPx, display: 'block', imageRendering: 'pixelated', borderRadius: 4, cursor: onSelect ? 'crosshair' : 'default' }}
+      style={{ width: wPx, height: hPx, display: 'block', imageRendering: 'pixelated', borderRadius: 4 }}
       onMouseMove={onHover ? (e) => onHover(cellAt(e)) : undefined}
       onMouseLeave={onHover ? () => onHover(null) : undefined}
-      onClick={onSelect ? (e) => { const cc = cellAt(e); if (cc) onSelect(cc); } : undefined}
     />
   );
 }

@@ -3,7 +3,7 @@
 // trace captured from the real engine so the join can never silently drift.
 
 import { describe, it, expect } from 'vitest';
-import { traceFieldsFor, outputTraceKey } from './traceIndex.ts';
+import { traceFieldsFor } from './traceIndex.ts';
 import { buildModelGraph } from './graph.ts';
 import { loadEngine } from '../../../tests/parity/fixtures.ts';
 import { featurize, TraceRecorder } from '../engine/index.ts';
@@ -49,13 +49,11 @@ describe('traceFieldsFor', () => {
   it('each stage has exactly one output field, and it is recorded', () => {
     const recordedKeys = captureTraceKeys();
     for (const node of g.nodes) {
-      const out = outputTraceKey(node);
-      if (traceFieldsFor(node).length === 0) {
-        expect(out).toBeNull();
-        continue;
-      }
-      expect(out, `no output for ${node.id}`).not.toBeNull();
-      expect(recordedKeys.has(out!)).toBe(true);
+      const fields = traceFieldsFor(node);
+      const outputs = fields.filter((f) => f.role === 'output');
+      if (fields.length === 0) continue;
+      expect(outputs, `no single output for ${node.id}`).toHaveLength(1);
+      expect(recordedKeys.has(outputs[0].key)).toBe(true);
     }
   });
 });

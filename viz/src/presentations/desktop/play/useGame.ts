@@ -16,7 +16,7 @@ import {
 const MODEL_ID = 'v3.1-nano';
 
 /** Absolute URL of a model's capsule.json (respects the GH-Pages deploy base). */
-export function capsuleUrlFor(modelId: string = MODEL_ID): string {
+function capsuleUrlFor(modelId: string = MODEL_ID): string {
   // public/weights/<id>/capsule.json, resolved to an ABSOLUTE url so the worker
   // (and capsule.ts's relative weights.bin lookup) can fetch it.
   const base = import.meta.env.BASE_URL ?? '/';

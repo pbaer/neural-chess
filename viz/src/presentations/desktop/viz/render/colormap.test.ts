@@ -1,7 +1,7 @@
 // colormap tests — pure color math (no DOM).
 
 import { describe, it, expect } from 'vitest';
-import { diverging, sequential, rgbCss, maxAbsOf, rangeOf, autoMode, niceSeq, colorScaleOf } from './colormap.ts';
+import { diverging, sequential, rgbCss, rangeOf, autoMode, niceSeq, colorScaleOf } from './colormap.ts';
 
 describe('diverging (two-slope over [lo, hi])', () => {
   it('matches the sequential zero color at value 0', () => {
@@ -40,10 +40,8 @@ describe('sequential', () => {
 });
 
 describe('reductions + helpers', () => {
-  it('maxAbsOf and rangeOf', () => {
-    const a = new Float32Array([-3, 1, 2]);
-    expect(maxAbsOf(a)).toBe(3);
-    expect(rangeOf(a)).toEqual([-3, 2]);
+  it('rangeOf', () => {
+    expect(rangeOf(new Float32Array([-3, 1, 2]))).toEqual([-3, 2]);
     expect(rangeOf(new Float32Array([]))).toEqual([0, 0]);
   });
 

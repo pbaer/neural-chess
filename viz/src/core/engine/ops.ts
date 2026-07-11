@@ -166,7 +166,3 @@ export function meanPool(x: Float32Array, rows: number, dim: number): Float32Arr
   for (let i = 0; i < dim; i++) out[i] = acc[i] / rows;
   return out;
 }
-
-export function tanh(x: number): number {
-  return Math.tanh(x);
-}

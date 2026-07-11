@@ -70,16 +70,6 @@ export function rgbCss(c: RGB): string {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
-/** Symmetric extent of |v| over an array (for a diverging scale). */
-export function maxAbsOf(data: ArrayLike<number>): number {
-  let m = 0;
-  for (let i = 0; i < data.length; i++) {
-    const a = Math.abs(data[i]);
-    if (a > m) m = a;
-  }
-  return m;
-}
-
 /** [min,max] of an array. */
 export function rangeOf(data: ArrayLike<number>): [number, number] {
   let lo = Infinity;

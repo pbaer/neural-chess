@@ -119,11 +119,6 @@ class EngineImpl implements Engine {
   }
 }
 
-/** Build an engine from an already-loaded Capsule. */
-export function createEngineFromCapsule(capsule: Capsule): Engine {
-  return new EngineImpl(capsule);
-}
-
 /** Build an engine from in-memory capsule bytes (no IO; used by tests). */
 export function createEngineFromBytes(manifest: CapsuleManifest, weights: ArrayBuffer): Engine {
   return new EngineImpl(loadCapsuleFromBytes(manifest, weights));

@@ -7,7 +7,6 @@
 export {
   createEngine,
   createEngineFromBytes,
-  createEngineFromCapsule,
   fetchCapsule,
   Capsule,
   featurize,
@@ -73,7 +72,7 @@ export type { TraceStore, TracePayload, TraceEntryData, TraceMeta, TraceSnapshot
 export { buildModelGraph, shapeSummary, idIndex } from './model-graph/graph.ts';
 export type { ModelGraph, GraphNode, GraphSource } from './model-graph/graph.ts';
 
-export { traceFieldsFor, outputTraceKey } from './model-graph/traceIndex.ts';
+export { traceFieldsFor } from './model-graph/traceIndex.ts';
 export type { TraceField } from './model-graph/traceIndex.ts';
 
 export { content, CONTENT } from './content/registry.ts';

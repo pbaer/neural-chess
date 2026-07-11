@@ -9,7 +9,7 @@
 // rank, keep file). Used to un-rotate model moves when black was to move. (NOT
 // 63-sq, which would flip both axes — that is wrong; the engine is authoritative.)
 
-import { PIECE_TYPE_INT, type BoardState } from './boardState.ts';
+import { type BoardState } from './boardState.ts';
 
 export const NUM_MOVE_TYPES = 73;
 export const NUM_MOVES = 64 * NUM_MOVE_TYPES; // 4672
@@ -208,5 +208,3 @@ export function pieceToMoveProbs(probsByIndex: Map<number, number>): Float32Arra
 export function rotateSquare(sq: number): number {
   return sq ^ 56;
 }
-
-export { PIECE_TYPE_INT };

@@ -68,10 +68,3 @@ export function traceFieldsFor(node: GraphNode): TraceField[] {
       return [];
   }
 }
-
-/** The single trace key representing a node's OUTPUT activation, or null. */
-export function outputTraceKey(node: GraphNode): string | null {
-  const fields = traceFieldsFor(node);
-  const out = fields.find((f) => f.role === 'output');
-  return out ? out.key : null;
-}

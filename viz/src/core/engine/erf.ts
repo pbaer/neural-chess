@@ -33,11 +33,6 @@ function erfccheb(z: number): number {
   return t * Math.exp(-z * z + 0.5 * (COF[0] + ty * d) - dd);
 }
 
-/** erfc(x) for all real x. */
-export function erfc(x: number): number {
-  return x >= 0 ? erfccheb(x) : 2 - erfccheb(-x);
-}
-
 /** erf(x) for all real x. */
 export function erf(x: number): number {
   return x >= 0 ? 1 - erfccheb(x) : erfccheb(-x) - 1;
