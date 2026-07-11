@@ -165,7 +165,10 @@ export function StageDetail({ node, capsule, traceVersion }: StageDetailProps) {
     return null;
   }, [actFields, primaryWeights]);
 
-  const [sel, setSel] = useState<FieldSel | null>(defaultSel);
+  // `sel` records only EXPLICIT user picks (null = none yet), so the default can
+  // keep improving as traces land — e.g. a stage expanded before the first trace
+  // starts on a weight chip, then upgrades to its marquee activation.
+  const [sel, setSel] = useState<FieldSel | null>(null);
   const active = sel ?? defaultSel;
 
   const select = (s: FieldSel) => {
