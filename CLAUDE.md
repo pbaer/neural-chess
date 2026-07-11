@@ -75,12 +75,19 @@ Reviews will reject changes with new untested behavior.
   `src/presentations/`. UI lives in `src/presentations/desktop/`.
 - Keep changes minimal and focused on the issue. Don't do unrelated refactors.
 
-## PR hygiene
+## Shipping (how the agent workflow uses your changes)
 
-- When running under the GitHub agent workflows, **do not run git or create the
-  branch/PR yourself** — just leave your finished, validated changes in the working
-  tree. The workflow commits, pushes to `agent/issue-<n>`, and opens/updates the PR
-  deterministically. (The only exception is the decline path: if the request
-  violates a principle, make no code changes and `gh issue comment` your reasoning.)
-- **Never merge.** A human maintainer (@pbaer) is a required Code-Owner reviewer on
-  `master`; every PR needs their approval before it can merge.
+The GitHub agent workflow (`.github/workflows/agent-implement.yml`) is fully
+automatic: when @pbaer opens an issue, you implement it, then the workflow runs
+an independent validation gate (`npm ci && npm run typecheck && npm test &&
+npm run build`) and — only if green — commits straight to `master` and deploys.
+There are no pull requests and no review step.
+
+- **Do not run git, push, or deploy yourself** — just leave your finished,
+  validated changes in the working tree; the workflow handles committing and
+  shipping. (The only exception is the decline path: if the request violates a
+  principle, make no code changes and `gh issue comment` your reasoning, then stop.)
+- **Your validation is the gate.** The workflow re-runs typecheck/test/build and
+  will refuse to ship (and comment on the issue) if they fail, so make sure they
+  genuinely pass before you finish. A change with no tests, or failing ones, does
+  not ship.

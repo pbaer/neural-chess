@@ -1,86 +1,103 @@
 name: Agent — implement issue
 
-# Turns a feedback issue into a pull request using Claude Code.
+# Turns an issue into a shipped change, fully automatically.
 #
-# Auto-starts ONLY when the issue was opened by the maintainer (@pbaer). For
-# issues filed by anyone else (e.g. via the in-app Feedback button), the
-# maintainer triggers the agent manually by adding the `agent-go` label.
+# When the maintainer (@pbaer) opens an issue, Claude implements it, the workflow
+# runs an independent validation gate (typecheck + test + build), and if green it
+# commits straight to master and triggers a deploy — no PR, no approval. Exactly
+# ONE run per issue (triggers on `opened` only; use the Run workflow button /
+# workflow_dispatch to (re)run against a specific issue number, e.g. one filed by
+# someone else via the in-app Feedback button).
 #
-# Division of labor: Claude ONLY edits files + runs the npm validation. The
-# branch/commit/push/PR is done deterministically in a plain workflow step with
-# explicit token auth — far more reliable than having the LLM drive git/gh (which
-# also wasted turns retrying failed pushes). The agent never merges: the `master`
-# ruleset requires the maintainer's Code-Owner approval (see .github/CODEOWNERS).
+# Claude ONLY edits files + runs npm; the git/commit/push/deploy is done
+# deterministically in a plain step. If validation fails, nothing is pushed and
+# the issue gets a comment. Worst case, file another issue.
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: 'Issue number to implement'
+        required: true
 
 permissions:
   contents: write
-  pull-requests: write
   issues: write
   id-token: write # required by claude-code-action for its OIDC token exchange
-  actions: read
+  actions: write # to dispatch the deploy workflow
 
 # One run per issue at a time.
 concurrency:
-  group: agent-issue-${{ github.event.issue.number }}
+  group: agent-issue-${{ github.event.issue.number || github.event.inputs.issue }}
   cancel-in-progress: false
 
 jobs:
   implement:
-    # Auto-run for the maintainer's own new issues; otherwise require `agent-go`.
+    # Auto-run for the maintainer's own new issues; anyone can be handled via a
+    # manual workflow_dispatch (only actors with write access can dispatch).
     if: >
-      (github.event.action == 'opened' && github.event.issue.user.login == 'pbaer') ||
-      (github.event.action == 'labeled' && github.event.label.name == 'agent-go')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && github.event.issue.user.login == 'pbaer')
     runs-on: ubuntu-latest
-    env:
-      ISSUE: ${{ github.event.issue.number }}
-      BRANCH: agent/issue-${{ github.event.issue.number }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: viz/package-lock.json
+
+      - name: Resolve issue number + title
+        id: issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NUM="${{ github.event.issue.number || github.event.inputs.issue }}"
+          TITLE="$(gh issue view "$NUM" -R "${{ github.repository }}" --json title --jq .title)"
+          echo "number=$NUM" >> "$GITHUB_OUTPUT"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
 
       - name: Implement with Claude
         id: claude
         uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ github.token }} # only for the decline-and-comment path
+          GH_TOKEN: ${{ github.token }} # so Claude can read the issue + decline-comment
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Implement the following feature/bug request by EDITING FILES in this
-            repository. You must make the actual code changes yourself — do not
-            merely describe a plan, and do not stop until it is done.
-
-            Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
-
-            ${{ github.event.issue.body }}
+            Implement the change requested in GitHub issue #${{ steps.issue.outputs.number }}
+            ("${{ steps.issue.outputs.title }}") by EDITING FILES in this repository.
+            You must make the actual code changes yourself — do not merely describe a
+            plan, and do not stop until it is done.
 
             Steps:
-            1. Read CLAUDE.md at the repo root (project principles, validation
+            1. Read the full request: `gh issue view ${{ steps.issue.outputs.number }} --comments`.
+            2. Read CLAUDE.md at the repo root (project principles, validation
                commands, test-coverage rules).
-            2. Explore the relevant code under `viz/` to see how to implement this.
-            3. Implement the smallest change that fully addresses the issue, matching
+            3. Explore the relevant code under `viz/` to see how to implement this.
+            4. Implement the smallest change that fully addresses the issue, matching
                existing conventions. Most changes live in `viz/`.
-            4. Add or update deterministic tests for the new/changed behavior
+            5. Add or update deterministic tests for the new/changed behavior
                (UX → a `*.dom.test.tsx` component test; logic → a Node `*.test.ts`).
                No LLM/network in tests.
-            5. Validate from `viz/`: run `npm ci`, then `npm run typecheck`,
+            6. Validate from `viz/`: run `npm ci`, then `npm run typecheck`,
                `npm test`, and `npm run build`. Fix every failure.
 
             You are NOT done until the feature is implemented, tests are added, and
             `npm test` and `npm run build` both pass. Do NOT end your turn with only
             a plan or a question — make the changes.
 
-            Do NOT run git or open a PR — the workflow commits your working-tree
-            changes and opens the PR automatically. ONLY exception: if the request
-            genuinely violates the project principles (human-games-only data, no
-            engine-derived signal, CC0 / no TWIC), make NO code changes and run
-            `gh issue comment ${{ github.event.issue.number }} --body "<why>"`, then stop.
-          # Bash is needed for npm; git/gh are handled by the workflow, not Claude.
+            Do NOT run git, push, or deploy — the workflow validates, commits, and
+            deploys your working-tree changes automatically. ONLY exception: if the
+            request genuinely violates the project principles (human-games-only
+            data, no engine-derived signal, CC0 / no TWIC), make NO code changes and
+            run `gh issue comment ${{ steps.issue.outputs.number }} --body "<why>"`, then stop.
+          # Bash is needed for npm; git/deploy are handled by the workflow, not Claude.
           claude_args: |
             --allowedTools "Bash,Edit,MultiEdit,Write,Read,Glob,Grep,NotebookEdit,TodoWrite"
             --max-turns 80
@@ -96,33 +113,42 @@ jobs:
           path: ${{ runner.temp }}/claude-execution-output.json
           if-no-files-found: ignore
 
-      - name: Open pull request from the agent's changes
-        if: ${{ !cancelled() }}
+      - name: Validate, commit to master, and deploy
+        if: ${{ steps.claude.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+          TITLE: ${{ steps.issue.outputs.title }}
         run: |
           set -euo pipefail
           git add -A
-          # Nothing staged AND no commits ahead of master → agent declined / only commented.
-          if git diff --cached --quiet && [ "$(git rev-list --count origin/master..HEAD)" -eq 0 ]; then
-            echo "No file changes produced; skipping PR."
+          # No changes → the agent declined and commented on the issue. Done.
+          if git diff --cached --quiet; then
+            echo "No file changes produced (agent declined or only commented)."
             exit 0
           fi
+
+          # Independent validation GATE — do not ship anything that isn't green.
+          # `set -e` fails the step (and the job) if any command fails, so a red
+          # build never reaches master.
+          ( cd viz && npm ci && npm run typecheck && npm test && npm run build )
+
           git config user.name "claude-agent[bot]"
           git config user.email "claude-agent[bot]@users.noreply.github.com"
-          git checkout -B "$BRANCH"
-          git diff --cached --quiet || git commit -m "Agent: address issue #$ISSUE"
-          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "HEAD:$BRANCH"
-          # Draft if the agent step didn't finish cleanly (e.g. hit max turns), so it's flagged.
-          DRAFT=""
-          [ "${{ steps.claude.outcome }}" = "success" ] || DRAFT="--draft"
-          existing="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)"
-          if [ -n "$existing" ]; then
-            echo "PR #$existing already open for $BRANCH; updated by the push above."
-          else
-            gh pr create $DRAFT --base master --head "$BRANCH" \
-              --title "Agent: ${{ github.event.issue.title }} (#$ISSUE)" \
-              --body "Automated fix for #$ISSUE by the Claude coding agent. Validation (typecheck/test/build) was run in the agent step. Review + approval required before merge.
+          git commit -m "Agent: ${TITLE} (#${ISSUE})"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "HEAD:master"
 
-          Closes #$ISSUE"
-          fi
+          # A push by GITHUB_TOKEN doesn't trigger the deploy workflow (recursion
+          # guard), so dispatch it explicitly.
+          gh workflow run deploy.yml --ref master
+          echo "Shipped issue #${ISSUE} (${TITLE}) to master and triggered deploy."
+
+      - name: Comment on the issue if the agent did not ship
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+          TITLE: ${{ steps.issue.outputs.title }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$ISSUE" --body "The coding agent worked on this (\"$TITLE\") but did not ship — it either couldn't complete the change or the validation gate (typecheck/test/build) failed, so nothing was committed or deployed. See the run log: $RUN_URL"
