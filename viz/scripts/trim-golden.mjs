@@ -1,5 +1,6 @@
 // postbuild: strip dev-only parity fixtures (golden.*) from the production build.
-// The runtime only fetches capsule.json / config.json / weights.bin; golden.bin
+// The runtime fetches only capsule.json + weights.bin (config.json ships as a
+// small export-time reference artifact); golden.bin
 // (~12 MB) + golden.json are used solely by the local parity test suite (which
 // reads them from public/weights/, not dist/), so they should not ship.
 

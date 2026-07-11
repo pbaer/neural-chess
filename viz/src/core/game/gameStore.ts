@@ -83,8 +83,8 @@ export const MCTS_DEFAULT_CUTOFF = 0.7;
 /**
  * Default MCTS ("think harder") settings. `sims` is now the MAXIMUM simulation
  * budget — the search cuts off early once a single move is clearly best (see
- * cutoffThreshold). 50 is the project's best in-budget setting and is cheap on the
- * deployed nano model. c_puct 1.5 is the project's tuned value.
+ * cutoffThreshold). 100 sims is cheap on the deployed nano model and pays off
+ * against strong opponents. c_puct 1.5 is the project's tuned value.
  */
 export const MCTS_DEFAULTS = { enabled: false, sims: 100, cPuct: 1.5, cutoffThreshold: MCTS_DEFAULT_CUTOFF } as const;
 

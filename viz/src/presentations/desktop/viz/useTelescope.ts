@@ -3,10 +3,9 @@
 //  * Loads a main-thread Capsule (graph + weights) so weight heatmaps and the
 //    version-neutral DAG have real data (the worker keeps its own copy for
 //    inference; the capsule is tiny).
-//  * On each position change (while the telescope is open) runs ONE traced
-//    forward via the worker and publishes it to the non-reactive traceStore.
-//    The play loop itself never requests a trace, so it pays nothing when the
-//    telescope is closed.
+//  * On each position change (while `enabled`) runs ONE traced forward via the
+//    worker and publishes it to the non-reactive traceStore. The play loop
+//    itself never requests a trace, so it pays nothing with tracing disabled.
 //  * Exposes the traceStore version as a reactive value via useSyncExternalStore.
 
 import { useEffect, useState, useSyncExternalStore } from 'react';

@@ -1,4 +1,4 @@
-// SVG chessboard — click-to-move, dependency-free (Unicode glyphs). Orientation
+// SVG chessboard — click-to-move, drawn with the bundled cburnett pieces. Orientation
 // follows humanColor (human side at the bottom). The model only ranks among
 // chess.js's legal moves, so all legality/turn gating comes from the store.
 

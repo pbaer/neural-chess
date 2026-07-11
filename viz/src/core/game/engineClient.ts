@@ -2,8 +2,8 @@
 //
 // Spawns the module worker, proxies init()/forward(), and exposes a small
 // promise-based API the game store consumes. Presentation-agnostic: it knows
-// nothing about React or the DOM beyond `Worker`. A null-worker fallback (direct
-// in-thread engine) is provided for non-Worker runtimes / tests.
+// nothing about React or the DOM beyond `Worker`. Tests substitute their own
+// fake EngineClient rather than spawning a worker.
 
 import * as Comlink from 'comlink';
 import type { WorkerApi, EngineMeta, ForwardReply } from '../engine/worker.ts';
