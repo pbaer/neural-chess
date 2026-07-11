@@ -120,11 +120,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           f="${{ runner.temp }}/claude-execution-output.json"
-          if [ -f "$f" ] && grep -q '"is_error": *true' "$f"; then
-            echo "::error::Claude execution failed (see transcript). Common cause: expired CLAUDE_CODE_OAUTH_TOKEN — refresh it with 'claude setup-token' and update the repo secret."
-            grep -o '"result": *"[^"]*"' "$f" | head -1 || true
+          [ -f "$f" ] || { echo "No transcript; skipping check."; exit 0; }
+          # Check ONLY the final result entry's is_error — NOT intermediate
+          # tool_result errors (e.g. a test that failed before Claude fixed it).
+          err="$(jq -r '[.[] | select(.type=="result") | .is_error] | any' "$f" 2>/dev/null || echo false)"
+          if [ "$err" = "true" ]; then
+            echo "::error::Claude execution failed. Common cause: expired CLAUDE_CODE_OAUTH_TOKEN — refresh with 'claude setup-token' and update the repo secret. Result:"
+            jq -r '.[] | select(.type=="result") | .result' "$f" 2>/dev/null | head -c 500
             exit 1
           fi
+          echo "Claude execution OK."
 
       - name: Validate, commit to master, and deploy
         if: ${{ steps.claude.outcome == 'success' }}
