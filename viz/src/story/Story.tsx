@@ -96,7 +96,7 @@ export function Story() {
             lessons came from the things that <em>didn&rsquo;t</em> work.
           </p>
 
-          <Figure>
+          <Figure caption="The steps to a strong browser-based model.">
             <JourneyTimeline />
           </Figure>
 
@@ -367,8 +367,8 @@ function JourneyTimeline() {
     ['v1', 'A first network that learns to play — with tactical blind spots.'],
     ['v2', 'Bigger; plays both colors; learns a sense of who&rsquo;s winning.'],
     ['v3', 'Switch to attention (a transformer): smaller and stronger.'],
-    ['data + distill', 'Clean up the signal in the data; a tiny student learns from a big teacher.'],
-    ['in your browser', 'Shrunk to ~116k numbers — small enough to see inside, with optional &ldquo;think harder&rdquo; search.'],
+    ['Data + distill', 'Clean up the signal in the data; a tiny student learns from a big teacher.'],
+    ['In your browser', 'Shrunk to ~116k numbers — small enough to see inside, with optional &ldquo;think harder&rdquo; search.'],
   ];
   return (
     <ol className="timeline">
