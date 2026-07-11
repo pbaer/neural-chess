@@ -155,7 +155,9 @@ describe('early cutoff (max-sims + snappy play on a dominant move)', () => {
 });
 
 describe('MCTS with the real engine (integration + profiling)', () => {
-  it('returns a legal move and is faithful to model priors at low sims', async () => {
+  // 300 real-engine sims take ~10s bare but can exceed vitest's default 30s
+  // timeout under v8 coverage instrumentation, so give this test extra room.
+  it('returns a legal move and is faithful to model priors at low sims', { timeout: 120_000 }, async () => {
     const engine = loadEngine();
     const evalr = makeEngineEvaluator(engine);
     const fen = new Chess().fen();
@@ -171,7 +173,6 @@ describe('MCTS with the real engine (integration + profiling)', () => {
     expect(result.snapshot.simsDone).toBeGreaterThan(0);
 
     // Profiling (visible with --reporter verbose): per-300-sim latency + per-sim.
-    // eslint-disable-next-line no-console
     console.log(
       `[MCTS profile] 300 sims in ${dt.toFixed(1)}ms (${(dt / 300).toFixed(3)}ms/sim); ` +
         `chosen ${result.move!.san} eval ${result.value.toFixed(3)}`,
