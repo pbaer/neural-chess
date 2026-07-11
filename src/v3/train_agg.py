@@ -312,7 +312,7 @@ def main():
 
     os.makedirs(args.save_dir, exist_ok=True)
 
-    # Auto-resume (crash insurance for long runs on the degraded box). Prefer the
+    # Auto-resume (crash insurance for long runs). Prefer the
     # highest completed-epoch checkpoint; if model_latest.pt is at/ahead of it
     # (crash mid-epoch), restart that epoch from these weights.
     start_epoch = 0

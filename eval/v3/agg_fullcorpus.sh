@@ -10,7 +10,7 @@ AGG=data/v2/agg_100M
 CSV=eval/v3/agg_full_metrics.csv
 rm -f "$CSV"
 # ~5 epochs x 10M samples = 50M draws/model. save-every-steps for crash insurance
-# on the degraded box (atomic model_latest.pt every ~10k steps ~= 50 min).
+# on long runs (atomic model_latest.pt every ~10k steps ~= 50 min).
 # ~5 epochs x 8M samples = 40M draws/model. 16 workers to parallelize the
 # random SSD reads of the 92GB X memmap (training is I/O-paced ~2000/s, like the
 # production 100M shard, since the corpus exceeds RAM). val capped (--val-cap

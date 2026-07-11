@@ -284,7 +284,7 @@ def train(
             scaler.step(optimizer)
             scaler.update()
 
-            # Mid-epoch rolling checkpoint (crash insurance — see CrashAnalysis.md).
+            # Mid-epoch rolling checkpoint (crash insurance for long runs).
             # Atomic: write to .tmp then os.replace, so a crash mid-write cannot
             # corrupt the existing model_latest.pt.
             if save_every_steps > 0 and (batch_idx + 1) % save_every_steps == 0:

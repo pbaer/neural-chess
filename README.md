@@ -383,7 +383,7 @@ python -m src.v2.train --arch v3 \
     --checkpoint-every 1 --num-workers 8 --save-every-steps 3500
 ```
 
-Notes specific to v3: `--checkpoint-every 1` enables gradient checkpointing (keeps the 37M tower at ~5.3 GB VRAM); `--d-model / --n-heads / --n-blocks / --ffn-mult / --stem-blocks / --no-geometry-bias` configure the tower. Everything else (BF16, cosine LR, auto-resume, `.stop`, losses) is shared with v2 below. v3 checkpoints carry `arch='v3'` and load via the same `play.py` / eval path. **On the current (degraded) training box, disable CPU Turbo Boost before long runs and use `--save-every-steps`** — see `memory/training-hardware-stability.md` / `CrashAnalysis.md`.
+Notes specific to v3: `--checkpoint-every 1` enables gradient checkpointing (keeps the 37M tower at ~5.3 GB VRAM); `--d-model / --n-heads / --n-blocks / --ffn-mult / --stem-blocks / --no-geometry-bias` configure the tower. Everything else (BF16, cosine LR, auto-resume, `.stop`, losses) is shared with v2 below. v3 checkpoints carry `arch='v3'` and load via the same `play.py` / eval path. Use `--save-every-steps` for periodic mid-run checkpoint insurance on long runs.
 
 ### v2 (prior generation)
 

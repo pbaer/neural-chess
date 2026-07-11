@@ -248,7 +248,7 @@ def main():
                             weight_decay=args.weight_decay, fused=True)
     os.makedirs(args.save_dir, exist_ok=True)
 
-    # auto-resume (crash insurance on the degraded box)
+    # auto-resume (crash insurance for long runs)
     start_epoch = 0
     gstep = 0
     ckpts = glob.glob(os.path.join(args.save_dir, f'{args.save_name}_e*.pt'))

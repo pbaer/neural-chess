@@ -124,4 +124,3 @@ ENV/
 # are kept LOCAL ONLY; evals auto-prefer the newest local one (src/engine.py).
 bin/stockfish-v*.exe
 !bin/stockfish-v08.exe
-CPU_RMA_Summary.md
