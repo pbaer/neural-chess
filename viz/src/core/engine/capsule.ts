@@ -135,8 +135,16 @@ export function loadCapsuleFromBytes(manifest: CapsuleManifest, weights: ArrayBu
  * resolved relative to it. (Browser / fetch-capable runtimes.)
  */
 export async function fetchCapsule(capsuleUrl: string): Promise<Capsule> {
-  const manifest = (await (await fetch(capsuleUrl)).json()) as CapsuleManifest;
+  const manifestRes = await fetch(capsuleUrl);
+  if (!manifestRes.ok) {
+    throw new Error(`Failed to fetch capsule manifest ${capsuleUrl}: HTTP ${manifestRes.status}.`);
+  }
+  const manifest = (await manifestRes.json()) as CapsuleManifest;
   const weightsUrl = new URL(manifest.weights_file ?? 'weights.bin', capsuleUrl).href;
-  const weights = await (await fetch(weightsUrl)).arrayBuffer();
+  const weightsRes = await fetch(weightsUrl);
+  if (!weightsRes.ok) {
+    throw new Error(`Failed to fetch capsule weights ${weightsUrl}: HTTP ${weightsRes.status}.`);
+  }
+  const weights = await weightsRes.arrayBuffer();
   return new Capsule(manifest, weights);
 }
