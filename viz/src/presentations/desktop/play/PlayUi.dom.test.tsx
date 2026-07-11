@@ -47,6 +47,28 @@ describe('MoveHistory', () => {
     expect(screen.getByTitle('Value head: -0.55 (Black better)')).toBeInTheDocument();
   });
 
+  it('keeps each move and its value badge together in one cell (same row)', () => {
+    render(
+      <MoveHistory
+        sanHistory={['e4', 'e5']}
+        valueHistory={[
+          { ply: 1, whiteValue: 0.12 },
+          { ply: 2, whiteValue: -0.4 },
+        ]}
+      />,
+    );
+    // The value badge is a sibling of the SAN inside the same .move-cell, so a move
+    // and its reading render on one row rather than the value stacking onto its own line.
+    const whiteCell = screen.getByText('e4').closest('.move-cell');
+    expect(whiteCell).not.toBeNull();
+    expect(within(whiteCell as HTMLElement).getByText('+0.12')).toBeInTheDocument();
+    expect(within(whiteCell as HTMLElement).getByTitle('Value head: +0.12 (White better)')).toBeInTheDocument();
+
+    const blackCell = screen.getByText('e5').closest('.move-cell');
+    expect(blackCell).not.toBeNull();
+    expect(within(blackCell as HTMLElement).getByText('-0.40')).toBeInTheDocument();
+  });
+
   it('omits value badges entirely when no value history is provided', () => {
     render(<MoveHistory sanHistory={['e4', 'e5']} />);
     expect(document.querySelector('.move-value')).toBeNull();

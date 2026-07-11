@@ -423,31 +423,40 @@ body {
   grid-template-columns: 36px 1fr 1fr;
   gap: 6px;
   padding: 3px 0;
-  align-items: start;
+  align-items: center;
 }
 
 .move-num {
   color: var(--muted);
 }
 
-/* Each move cell stacks its SAN over the model's value-head badge (when present). */
+/* Each move cell keeps its SAN and the model's value-head badge on one row, so a
+   move and its reading read as a single line on both desktop and mobile. The badge
+   wraps under the SAN only if the cell is too narrow to hold both (a safety net). */
 .move-cell {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 6px;
   min-width: 0;
+}
+
+.move-san {
+  flex: 0 0 auto;
 }
 
 /* Per-move value badge: a small centered White(+)/Black(−) bar + signed number. */
 .move-value {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .move-value-bar {
   position: relative;
-  flex: 1;
+  flex: none;
+  width: 30px;
   height: 6px;
   min-width: 0;
   background: var(--track);
