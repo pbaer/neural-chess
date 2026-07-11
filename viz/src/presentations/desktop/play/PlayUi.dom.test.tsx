@@ -47,7 +47,7 @@ describe('MoveHistory', () => {
     expect(screen.getByTitle('Value head: -0.55 (Black better)')).toBeInTheDocument();
   });
 
-  it('keeps each move and its value badge together in one cell (same row)', () => {
+  it('lays each row out as five ordered cells: num, White SAN, White value, Black SAN, Black value', () => {
     render(
       <MoveHistory
         sanHistory={['e4', 'e5']}
@@ -57,45 +57,50 @@ describe('MoveHistory', () => {
         ]}
       />,
     );
-    // The value badge is a sibling of the SAN inside the same .move-cell, so a move
-    // and its reading render on one row rather than the value stacking onto its own line.
-    const whiteCell = screen.getByText('e4').closest('.move-cell');
-    expect(whiteCell).not.toBeNull();
-    expect(within(whiteCell as HTMLElement).getByText('+0.12')).toBeInTheDocument();
-    expect(within(whiteCell as HTMLElement).getByTitle('Value head: +0.12 (White better)')).toBeInTheDocument();
-
-    const blackCell = screen.getByText('e5').closest('.move-cell');
-    expect(blackCell).not.toBeNull();
-    expect(within(blackCell as HTMLElement).getByText('-0.40')).toBeInTheDocument();
+    // The value bar lives in its own dedicated grid column — not stuffed inside the SAN
+    // cell — so every column (including the two value columns) lines up across rows.
+    const row = screen.getAllByRole('listitem')[0];
+    const cells = Array.from(row.children);
+    expect(cells).toHaveLength(5);
+    expect(cells[0]).toHaveClass('move-num');
+    expect(cells[1]).toHaveClass('move-san');
+    expect(cells[1]).toHaveTextContent('e4');
+    expect(cells[2]).toHaveClass('move-value');
+    expect(within(cells[2] as HTMLElement).getByText('+0.12')).toBeInTheDocument();
+    expect(cells[3]).toHaveClass('move-san');
+    expect(cells[3]).toHaveTextContent('e5');
+    expect(cells[4]).toHaveClass('move-value');
+    expect(within(cells[4] as HTMLElement).getByText('-0.40')).toBeInTheDocument();
   });
 
-  it('renders the value badge as the trailing element of its cell so it aligns to the right edge', () => {
-    // Alignment ("same x for all rows") relies on the badge being the last child of the
-    // equal-width move cell, so margin-left:auto pins it flush right no matter how long the SAN is.
-    // "Qxd8+" (5 chars) and "e5" (2 chars) must still leave the badge in the same trailing slot.
+  it('keeps the value columns aligned by holding an empty placeholder cell when a move has no reading', () => {
+    // Only White's move has a reading; the layout must still emit a value cell for Black so
+    // the shared grid columns (and thus every bar's x offset) stay put row to row.
     render(
       <MoveHistory
         sanHistory={['Qxd8+', 'e5']}
-        valueHistory={[
-          { ply: 1, whiteValue: 0.12 },
-          { ply: 2, whiteValue: -0.4 },
-        ]}
+        valueHistory={[{ ply: 1, whiteValue: 0.12 }]}
       />,
     );
-    const longCell = screen.getByText('Qxd8+').closest('.move-cell') as HTMLElement;
-    const shortCell = screen.getByText('e5').closest('.move-cell') as HTMLElement;
-    // In both the long-SAN and short-SAN cell the value badge is the final child.
-    expect(longCell.lastElementChild).toHaveClass('move-value');
-    expect(shortCell.lastElementChild).toHaveClass('move-value');
-    // The signed number is fixed-width (sign + one digit + "." + two decimals), so with the
-    // badge right-aligned the bar's left edge lines up across rows too.
+    const cells = Array.from(screen.getAllByRole('listitem')[0].children);
+    expect(cells).toHaveLength(5);
+    // White's value cell carries the badge; Black's is an empty (aria-hidden) placeholder.
+    expect(cells[2]).toHaveClass('move-value');
+    expect(cells[2]).not.toHaveClass('move-value-empty');
+    expect(cells[4]).toHaveClass('move-value-empty');
+    expect(cells[4]).toBeEmptyDOMElement();
+    // A long SAN ("Qxd8+") does not push the value into a different column — the badge is
+    // its own cell, so the fixed-width signed number stays a clean 5 characters.
     expect(screen.getByText('+0.12').textContent).toHaveLength(5);
-    expect(screen.getByText('-0.40').textContent).toHaveLength(5);
   });
 
   it('omits value badges entirely when no value history is provided', () => {
     render(<MoveHistory sanHistory={['e4', 'e5']} />);
-    expect(document.querySelector('.move-value')).toBeNull();
+    // No actual badge (bar + number) renders; the value columns hold only empty placeholders
+    // (which keep the table columns aligned) — so no bar and no signed number appear.
+    expect(document.querySelector('.move-value-bar')).toBeNull();
+    expect(document.querySelector('.move-value-num')).toBeNull();
+    expect(document.querySelectorAll('.move-value:not(.move-value-empty)')).toHaveLength(0);
   });
 });
 

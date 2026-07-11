@@ -25,17 +25,11 @@ function MoveValue({ whiteValue }: { whiteValue: number }) {
   );
 }
 
-/** One SAN cell (may be empty) with its value badge inline on the same row when the model has one.
- *  The badge is always the trailing element of the cell, so CSS (margin-left:auto) can pin it to the
- *  cell's right edge — every row's badge then lands at the same x regardless of the SAN's length. */
-function MoveCell({ san, whiteValue }: { san: string; whiteValue?: number }) {
-  if (!san) return <span className="move-cell" />;
-  return (
-    <span className="move-cell">
-      <span className="move-san">{san}</span>
-      {whiteValue !== undefined && <MoveValue whiteValue={whiteValue} />}
-    </span>
-  );
+/** The value column for one ply: the model's badge when it has a reading, else an empty
+ *  placeholder that still occupies the shared grid column so every bar lines up as a table. */
+function ValueCell({ whiteValue }: { whiteValue?: number }) {
+  if (whiteValue === undefined) return <span className="move-value move-value-empty" aria-hidden />;
+  return <MoveValue whiteValue={whiteValue} />;
 }
 
 export function MoveHistory({
@@ -51,6 +45,10 @@ export function MoveHistory({
   for (let i = 0; i < sanHistory.length; i += 2) {
     rows.push({ n: i / 2 + 1, w: sanHistory[i], b: sanHistory[i + 1] ?? '', wPly: i + 1, bPly: i + 2 });
   }
+  // A single grid (see .move-list in styles.css) with fixed columns — number, White SAN,
+  // White value, Black SAN, Black value — so every column, including the value bars, lines
+  // up vertically like a table. Each row is display:contents, contributing its five cells
+  // directly to the shared grid tracks; empty cells still hold their column's width.
   return (
     <div className="move-history">
       <div className="panel-title">Moves</div>
@@ -59,8 +57,10 @@ export function MoveHistory({
         {rows.map((row) => (
           <li key={row.n} className="move-row">
             <span className="move-num">{row.n}.</span>
-            <MoveCell san={row.w} whiteValue={valueByPly.get(row.wPly)} />
-            <MoveCell san={row.b} whiteValue={valueByPly.get(row.bPly)} />
+            <span className="move-san">{row.w}</span>
+            <ValueCell whiteValue={valueByPly.get(row.wPly)} />
+            <span className="move-san">{row.b}</span>
+            <ValueCell whiteValue={valueByPly.get(row.bPly)} />
           </li>
         ))}
       </ol>

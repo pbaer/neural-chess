@@ -409,6 +409,11 @@ body {
   color: var(--muted);
 }
 
+/* The move list is one shared grid (not one grid per row) so every column lines up
+   vertically like a table across all rows: move number, White SAN, White value,
+   Black SAN, Black value. The two 1fr SAN columns stay equal width; the two auto
+   value columns are sized to the (fixed-width) badge, so all the value bars form
+   clean vertical columns regardless of how long each SAN is. */
 .move-list {
   list-style: none;
   margin: 0;
@@ -416,45 +421,41 @@ body {
   max-height: 220px;
   overflow-y: auto;
   font: 14px ui-monospace, SFMono-Regular, Menlo, monospace;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
 }
 
+/* Each row spreads its five cells directly into the shared grid tracks above. */
 .move-row {
-  display: grid;
-  grid-template-columns: 36px 1fr 1fr;
-  gap: 6px;
+  display: contents;
+}
+
+.move-num,
+.move-san,
+.move-value {
   padding: 3px 0;
-  align-items: center;
 }
 
 .move-num {
   color: var(--muted);
 }
 
-/* Each move cell keeps its SAN and the model's value-head badge on one row, so a
-   move and its reading read as a single line on both desktop and mobile. The badge
-   wraps under the SAN only if the cell is too narrow to hold both (a safety net). */
-.move-cell {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 3px 6px;
-  min-width: 0;
-}
-
 .move-san {
-  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Per-move value badge: a small centered White(+)/Black(−) bar + signed number.
-   margin-left:auto pins it to the right edge of its (equal-width 1fr) move column,
-   so every badge lands at the same x across rows regardless of how many characters
-   the SAN took — the bar chart reads as one clean vertical column. */
+   Living in its own grid column (left-aligned), every badge — and so every bar —
+   lands at the same x across rows, reading as one clean vertical column. */
 .move-value {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-left: auto;
 }
 
 .move-value-bar {
@@ -475,6 +476,7 @@ body {
 }
 
 .move-empty {
+  grid-column: 1 / -1;
   color: var(--muted);
 }
 
