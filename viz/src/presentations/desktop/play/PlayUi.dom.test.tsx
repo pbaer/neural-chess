@@ -5,7 +5,9 @@
 // serve as the pattern for testing the play UI's rendering logic.
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import type { SearchSnapshot } from '../../../core/index.ts';
 import { MoveHistory } from './MoveHistory.tsx';
+import { SearchPanel } from './SearchPanel.tsx';
 import { ValueGauge } from './ValueGauge.tsx';
 
 describe('MoveHistory', () => {
@@ -101,6 +103,55 @@ describe('MoveHistory', () => {
     expect(document.querySelector('.move-value-bar')).toBeNull();
     expect(document.querySelector('.move-value-num')).toBeNull();
     expect(document.querySelectorAll('.move-value:not(.move-value-empty)')).toHaveLength(0);
+  });
+});
+
+describe('SearchPanel', () => {
+  // A minimal finished-search snapshot: mover's-side root eval +0.40, one root move.
+  const snapshot: SearchSnapshot = {
+    simsDone: 100,
+    totalSims: 100,
+    elapsedMs: 1234,
+    rootEval: 0.4,
+    bestUci: 'g1f3',
+    pv: [{ uci: 'g1f3', san: 'Nf3' }],
+    children: [
+      { from: 'g1', to: 'f3', uci: 'g1f3', san: 'Nf3', fromIdx: 6, toIdx: 21, n: 80, q: 0.4, p: 0.5, puct: 0.45 },
+    ],
+    running: false,
+  };
+
+  it('renders nothing without a snapshot', () => {
+    const { container } = render(<SearchPanel search={null} thinking={false} modelColor="w" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('shows the score in the White(+)/Black(−) frame when the model is White', () => {
+    render(<SearchPanel search={snapshot} thinking={false} modelColor="w" />);
+    // Model (the mover at the root) is White, so the mover's-side +0.40 stays +0.40.
+    expect(screen.getByText('+0.40', { selector: '.search-eval-num' })).toBeInTheDocument();
+    expect(screen.getByText('White clearly better')).toBeInTheDocument();
+  });
+
+  it('negates the mover-side score into the White frame when the model is Black', () => {
+    render(<SearchPanel search={snapshot} thinking={false} modelColor="b" />);
+    // Mover's-side +0.40 for Black means Black is ahead → shown as −0.40 for White.
+    expect(screen.getByText('-0.40')).toBeInTheDocument();
+    expect(screen.getByText('Black clearly better')).toBeInTheDocument();
+    // The label's tooltip must describe the frame actually displayed (White's side),
+    // not the mover's side — the number was just negated out of the mover frame.
+    const label = screen.getByText('Score after search');
+    expect(label).toHaveAttribute('title', expect.stringContaining('White’s side'));
+    expect(label.getAttribute('title')).not.toContain('mover');
+  });
+
+  it('renders the PUCT stats row with mover-side Q untouched', () => {
+    render(<SearchPanel search={snapshot} thinking={false} modelColor="b" />);
+    // The table row keeps raw mover's-side values: N, Q, P, PUCT.
+    expect(screen.getByText('Nf3', { selector: '.st-move' })).toBeInTheDocument();
+    expect(screen.getByText('80')).toBeInTheDocument();
+    expect(screen.getByText('+0.40', { selector: '.st-q' })).toBeInTheDocument();
+    expect(screen.getByText('50.0%')).toBeInTheDocument();
   });
 });
 

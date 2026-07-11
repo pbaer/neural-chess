@@ -46,7 +46,7 @@ export function SearchPanel({ search, thinking, modelColor, onHover, hoverUci }:
       <div className="search-eval">
         <span
           className="search-eval-label"
-          title="Backed-up value: the search’s refined position score, averaged up the tree from all the trials (mover’s side: +1 winning, −1 losing)."
+          title="Backed-up value: the search’s refined position score, averaged up the tree from all the trials (shown from White’s side: +1 White winning, −1 Black winning)."
         >
           Score after search
         </span>
