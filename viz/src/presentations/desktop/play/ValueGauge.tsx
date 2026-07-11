@@ -41,13 +41,13 @@ export function ValueGauge({ whiteValue }: { whiteValue: number | null }) {
         {has ? (
           favored ? (
             <>
-              the model thinks <strong>{favored === 'w' ? 'White' : 'Black'}</strong> is {strength(mag)}
+              The model thinks <strong>{favored === 'w' ? 'White' : 'Black'}</strong> is {strength(mag)}
             </>
           ) : (
-            'the model judges the position roughly even'
+            'The model judges the position roughly even'
           )
         ) : (
-          'no model move yet'
+          'No model move yet'
         )}
       </div>
     </div>
