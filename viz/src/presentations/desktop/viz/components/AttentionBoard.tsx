@@ -5,41 +5,15 @@
 // exact scalar and decomposes the score into q·k/√d + geometry-bias.
 
 import { useMemo, useState } from 'react';
-import type { Color, PieceType } from '../../../../core/index.ts';
+import { relIndex, type Color } from '../../../../core/index.ts';
+import { parseBoard } from '../../parseBoard.ts';
 import { Piece } from '../../play/pieces.tsx';
 import { niceSeq, rangeOf, sequential, rgbCss } from '../render/colormap.ts';
 import { Legend } from '../render/Heatmap.tsx';
 import type { ScalarView } from '../scalar/ScalarInspector.tsx';
 
-interface Cell {
-  color: Color;
-  type: PieceType;
-}
-
-/** Parse a FEN placement field into a 64-array indexed by python-chess square. */
-function parseBoard(fen: string): (Cell | null)[] {
-  const arr: (Cell | null)[] = new Array(64).fill(null);
-  const rows = fen.split(' ')[0].split('/');
-  for (let r = 0; r < 8; r++) {
-    const rankIdx = 7 - r;
-    let file = 0;
-    for (const ch of rows[r]) {
-      if (ch >= '1' && ch <= '8') file += ch.charCodeAt(0) - 48;
-      else {
-        const color: Color = ch === ch.toUpperCase() ? 'w' : 'b';
-        arr[rankIdx * 8 + file] = { color, type: ch.toLowerCase() as PieceType };
-        file++;
-      }
-    }
-  }
-  return arr;
-}
-
-function relIdx(i: number, j: number): number {
-  const dr = (i >> 3) - (j >> 3) + 7;
-  const df = (i & 7) - (j & 7) + 7;
-  return dr * 15 + df;
-}
+// The engine's (64,64)→[0,224] relative-position table (query i, key j).
+const REL_IDX = relIndex();
 
 /** Engine-frame token s → algebraic label, accounting for the black mirror. */
 function tokenLabel(s: number, turn: Color): string {
@@ -106,7 +80,7 @@ export function AttentionBoard({ probs, scores, relBias, heads, fen, turn, onSca
       const s = scores[head * 64 * 64 + q * 64 + kmax];
       terms.push({ label: 'score (pre-softmax)', value: s });
       if (relBias) {
-        const bias = relBias[head * 225 + relIdx(q, kmax)];
+        const bias = relBias[head * 225 + REL_IDX[q * 64 + kmax]];
         terms.push({ label: 'geometry bias', value: bias });
         terms.push({ label: 'q·k / √d  (= score − bias)', value: s - bias });
         formula = 'score = q·k/√d + bias ;  prob = softmax(score)';

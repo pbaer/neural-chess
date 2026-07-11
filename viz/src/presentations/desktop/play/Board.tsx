@@ -3,34 +3,10 @@
 // chess.js's legal moves, so all legality/turn gating comes from the store.
 
 import { useMemo, useState } from 'react';
-import type { Color, GameState, GameStore, PieceType, PromotionPiece, RootChildStat } from '../../../core/index.ts';
+import type { GameState, GameStore, PieceType, PromotionPiece, RootChildStat } from '../../../core/index.ts';
+import { parseBoard } from '../parseBoard.ts';
 import { Piece, PieceGlyph } from './pieces.tsx';
 import { CANDIDATE_ARROW_STYLE, MoveArrows, SEARCH_ARROW_STYLE, type ArrowSpec } from './MoveArrows.tsx';
-
-interface Cell {
-  color: Color;
-  type: PieceType;
-}
-
-/** Parse a FEN placement field into a 64-array indexed by python-chess square. */
-function parseBoard(fen: string): (Cell | null)[] {
-  const arr: (Cell | null)[] = new Array(64).fill(null);
-  const rows = fen.split(' ')[0].split('/'); // rows[0] = rank 8
-  for (let r = 0; r < 8; r++) {
-    const rankIdx = 7 - r;
-    let file = 0;
-    for (const ch of rows[r]) {
-      if (ch >= '1' && ch <= '8') {
-        file += ch.charCodeAt(0) - 48;
-      } else {
-        const color: Color = ch === ch.toUpperCase() ? 'w' : 'b';
-        arr[rankIdx * 8 + file] = { color, type: ch.toLowerCase() as PieceType };
-        file++;
-      }
-    }
-  }
-  return arr;
-}
 
 export interface BoardProps {
   store: GameStore;

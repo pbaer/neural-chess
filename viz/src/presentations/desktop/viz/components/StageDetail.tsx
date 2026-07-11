@@ -18,9 +18,9 @@ import {
   type Capsule,
   type Color,
   type GraphNode,
-  type PieceType,
   type TraceField,
 } from '../../../../core/index.ts';
+import { parseBoard, type BoardCell } from '../../parseBoard.ts';
 import { Heatmap, HEATMAP_GUTTER, Legend } from '../render/Heatmap.tsx';
 import { colorScaleOf, diverging, niceSeq, rangeOf, rgbCss, sequential } from '../render/colormap.ts';
 import { ContentCard } from '../ContentCard.tsx';
@@ -44,33 +44,10 @@ const PLANE_NAMES = [
   'en passant', 'halfmove/100', 'fullmove/100', 'side to move', 'repetition',
 ];
 
-interface PieceCell {
-  color: Color;
-  type: PieceType;
-}
-
-/** Parse a FEN placement field into a 64-array indexed by python-chess square. */
-function parseBoard(fen: string): (PieceCell | null)[] {
-  const arr: (PieceCell | null)[] = new Array(64).fill(null);
-  const rows = (fen.split(' ')[0] ?? '').split('/');
-  for (let r = 0; r < 8; r++) {
-    const rankIdx = 7 - r;
-    let file = 0;
-    for (const ch of rows[r] ?? '') {
-      if (ch >= '1' && ch <= '8') file += ch.charCodeAt(0) - 48;
-      else {
-        arr[rankIdx * 8 + file] = { color: ch === ch.toUpperCase() ? 'w' : 'b', type: ch.toLowerCase() as PieceType };
-        file++;
-      }
-    }
-  }
-  return arr;
-}
-
 /** Piece glyphs for an 8×8 board (viewBox 0 0 8 8), network frame: side to move at
  *  the bottom. A contrasting halo (paint-order stroke) keeps both colors legible
  *  over any heatmap cell. Non-interactive overlay. */
-function BoardGlyphs({ board, turn }: { board: (PieceCell | null)[]; turn: Color }) {
+function BoardGlyphs({ board, turn }: { board: (BoardCell | null)[]; turn: Color }) {
   const rows = [0, 1, 2, 3, 4, 5, 6, 7];
   return (
     <g style={{ pointerEvents: 'none' }}>
@@ -588,7 +565,7 @@ function BiasStrip({ bias, axis, cellPx, mode, range, label, onScalar }: {
 
 function BoardSquares({ avg, board, turn, sizePx, gutter, mode, range, highlight, headLabel, arrows, onHoverSquare, onPick }: {
   avg: Float32Array;
-  board: (PieceCell | null)[] | null;
+  board: (BoardCell | null)[] | null;
   turn: Color;
   /** Side length in px — set to the heatmap's grid height so the two line up. */
   sizePx: number;

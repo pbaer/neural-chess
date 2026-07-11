@@ -3,7 +3,7 @@
 // caller can reach a single scalar). Crisp at any DPR.
 
 import { useEffect, useMemo, useRef } from 'react';
-import { diverging, rangeOf, rgbCss, sequential, type RGB } from './colormap.ts';
+import { autoMode, diverging, rangeOf, rgbCss, sequential, type RGB } from './colormap.ts';
 
 export interface Cell {
   r: number;
@@ -47,7 +47,7 @@ export function Heatmap(props: HeatmapProps) {
   const { data, rows, cols, arrowAxis, arrowIndex, onHover, flipY = false, ariaLabel } = props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const mode = props.mode ?? (rangeOf(data)[0] < -1e-9 ? 'diverging' : 'sequential');
+  const mode = props.mode ?? autoMode(data);
   const range = props.range ?? rangeOf(data);
   const sizePx = props.sizePx ?? 280;
 

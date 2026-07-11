@@ -12,8 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import './feedback.css';
-
-const REPO_URL = 'https://github.com/pbaer/neural-chess';
+import { REPO_URL } from '../shared/repo.ts';
 
 type Kind = 'bug' | 'feature';
 

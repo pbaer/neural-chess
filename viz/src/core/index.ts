@@ -16,6 +16,7 @@ export {
   legalMask,
   legalPolicySoftmax,
   pieceToMoveProbs,
+  relIndex,
   rotateSquare,
   NUM_MOVES,
   NUM_MOVE_TYPES,

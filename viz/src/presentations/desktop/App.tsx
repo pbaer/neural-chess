@@ -15,6 +15,7 @@ import { useGame } from './play/useGame.ts';
 import { ModelInspector } from './viz/ModelInspector.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import { FeedbackLink } from '../../feedback/Feedback.tsx';
+import { REPO_URL } from '../../shared/repo.ts';
 
 export function App() {
   const { store, client, capsuleUrl, ready, meta, error } = useGame();
@@ -41,8 +42,6 @@ export function App() {
     </div>
   );
 }
-
-const REPO_URL = 'https://github.com/pbaer/neural-chess';
 
 /** Small, muted footer: license, third-party attribution, a repo link, and the
  *  in-app feedback trigger (with live model/position context for bug reports). */

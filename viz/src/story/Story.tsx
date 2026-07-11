@@ -5,10 +5,10 @@
 
 import { useSyncExternalStore } from 'react';
 import { FeedbackLink } from '../feedback/Feedback.tsx';
+import { REPO_URL } from '../shared/repo.ts';
 
 const BASE = import.meta.env.BASE_URL ?? '/';
 const PLAY_URL = `${BASE}`;
-const REPO_URL = 'https://github.com/pbaer/neural-chess';
 
 export function Story() {
   return (

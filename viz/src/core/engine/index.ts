@@ -146,6 +146,7 @@ export {
 } from './moves.ts';
 export type { Move } from './moves.ts';
 export type { BoardState, PieceInfo, Color, PieceType } from './boardState.ts';
+export { relIndex } from './relIndex.ts';
 export { TraceRecorder } from './trace.ts';
 export type { Trace, TraceEntry, TraceOptions, TraceGranularity } from './trace.ts';
 export { Model } from './model.ts';
