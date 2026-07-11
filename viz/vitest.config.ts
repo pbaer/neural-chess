@@ -1,19 +1,41 @@
 import { defineConfig } from 'vitest/config';
 
-// Two flavours of test share this config:
+// Two flavours of test share this config, split into vitest projects (the
+// vitest-4 replacement for environmentMatchGlobs, which v4 removed):
 //   - Logic/parity tests run in pure Node (fast). They read golden.bin from disk
 //     and exercise the TS engine; no DOM needed.
-//   - Component/UX tests (files named *.dom.test.tsx) opt into jsdom via
-//     environmentMatchGlobs so React Testing Library can render and drive real
-//     user interactions. tests/setup.ts adds the jest-dom matchers.
+//   - Component/UX tests (files named *.dom.test.{ts,tsx}) run in jsdom so React
+//     Testing Library can render and drive real user interactions. The files
+//     also carry a `// @vitest-environment jsdom` pragma, which makes each one
+//     self-contained (the pragma wins over the project environment anyway).
+// tests/setup.ts adds the jest-dom matchers in both projects.
+const shared = {
+  globals: true,
+  setupFiles: ['./tests/setup.ts'],
+  testTimeout: 30000,
+} as const;
+
 export default defineConfig({
   test: {
-    globals: true,
-    environment: 'node',
-    environmentMatchGlobs: [['**/*.dom.test.{ts,tsx}', 'jsdom']],
-    include: ['tests/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
-    setupFiles: ['./tests/setup.ts'],
-    testTimeout: 30000,
+    projects: [
+      {
+        test: {
+          ...shared,
+          name: 'node',
+          environment: 'node',
+          include: ['tests/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+          exclude: ['**/*.dom.test.{ts,tsx}', '**/node_modules/**'],
+        },
+      },
+      {
+        test: {
+          ...shared,
+          name: 'dom',
+          environment: 'jsdom',
+          include: ['tests/**/*.dom.test.{ts,tsx}', 'src/**/*.dom.test.{ts,tsx}'],
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
