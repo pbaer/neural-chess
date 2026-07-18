@@ -2,8 +2,8 @@ import { defineConfig } from 'vitest/config';
 
 // Two flavours of test share this config, split into vitest projects (the
 // vitest-4 replacement for environmentMatchGlobs, which v4 removed):
-//   - Logic/parity tests run in pure Node (fast). They read golden.bin from disk
-//     and exercise the TS engine; no DOM needed.
+//   - Logic/parity tests run in pure Node (fast). They read the golden fixtures
+//     (tests/parity/fixtures/) from disk and exercise the TS engine; no DOM needed.
 //   - Component/UX tests (files named *.dom.test.{ts,tsx}) run in jsdom so React
 //     Testing Library can render and drive real user interactions. The files
 //     also carry a `// @vitest-environment jsdom` pragma, which makes each one

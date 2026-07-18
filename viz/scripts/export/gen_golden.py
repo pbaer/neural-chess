@@ -16,10 +16,13 @@ policy/value against the real model() output to guarantee fidelity.
 
 GPU is OFF-LIMITS (training is using it): everything runs on CPU.
 
+The output is a dev-only TEST FIXTURE (never shipped): it lives under
+viz/tests/parity/fixtures/, NOT next to the deployed capsule in public/weights/.
+
 Usage (from repo root):
   .venv/Scripts/python.exe viz/scripts/export/gen_golden.py \
       --ckpt model/v3/v3.1-nano/v3.1-nano_e0015.pt \
-      --out-dir viz/public/weights/v3.1-nano
+      --out-dir viz/tests/parity/fixtures/v3.1-nano
 """
 import argparse
 import json

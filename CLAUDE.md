@@ -40,8 +40,10 @@ npm run build       # tsc + vite build for both entries (index.html + story.html
 - The suite includes **PyTorch forward-parity** tests (`tests/parity/`) that assert
   the TS engine matches the reference model (identical argmax, value error < 1e-4).
   Do not weaken or skip them. Only touch the golden fixtures
-  (`viz/public/weights/**/golden.*`) if you deliberately regenerate them with the
-  Python exporter — otherwise leave them alone.
+  (`viz/tests/parity/fixtures/**/golden.*`) if you deliberately regenerate them
+  with the Python exporter — otherwise leave them alone. `viz/public/weights/**`
+  is the shipped Model Capsule (`capsule.json` + `weights.bin`) — dev/test
+  fixtures must not live there.
 - All tests must be **deterministic and run without an LLM or network** (for speed
   and cost). Never add a test that calls a model API.
 

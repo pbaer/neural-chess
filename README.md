@@ -228,7 +228,7 @@ A public, static, **educational** browser app (React + Vite + TypeScript) that r
 
 The **estimated Elo** in the configuration panel is empirical, not a guess: the GPU twin of the browser model played ~326 games against **Stockfish 18** (`UCI_LimitStrength` at calibrated Elo rungs, move selection through the same value-adaptive logic the app uses), and its Elo was fit per setting by maximum likelihood. The displayed number = `base(mode, sims) − varietyPenalty(mode, variety)`, interpolated in `log(sims)`. Measured span: **~1310** (10-sim MCTS — shallow search actually trails one-shot's ~1572) rising to **~2474** at 300 sims; the one-shot variety penalty is large (−180/−304 at variety 0.5/1.0) while MCTS's is small (a Q-margin floor bounds it). Anchored to Stockfish's own Elo scale (roughly tracks FIDE/online). Calibration harness: `eval/v3/elo_calibrate.py`; the table lives in `viz/src/core/strength/elo.ts`.
 
-The browser hero is **`v3.1-clean-distilled`** — the [distilled](#distillation--the-browser-hero) 116k net above. It is **architecture-version-neutral**: instead of a `.pt` it loads a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` graph + `weights.bin` + `config.json`), so it renders whatever architecture the capsule declares. Chess piece graphics are the *cburnett* set (BSD; see `viz/THIRD_PARTY.md`), and a footer carries the license + attribution + repo link. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
+The browser hero is **`v3.1-clean-distilled`** — the [distilled](#distillation--the-browser-hero) 116k net above. It is **architecture-version-neutral**: instead of a `.pt` it loads a self-describing **Model Capsule** (`viz/scripts/export/export_model.py` → `capsule.json` config + graph + `weights.bin`), so it renders whatever architecture the capsule declares. Chess piece graphics are the *cburnett* set (BSD; see `viz/THIRD_PARTY.md`), and a footer carries the license + attribution + repo link. See `viz/README.md` and `viz/IMPLEMENTATION_PLAN.md`.
 
 ## Roadmap — next big model
 
@@ -681,7 +681,7 @@ neural-chess/
 ├── viz/                     # Neural Chess web tool (React + Vite + TS) — see viz/README.md
 │   ├── src/core/            # presentation-agnostic: engine + trace + model-graph + content + game
 │   ├── src/presentations/desktop/   # React desktop UI (play + Model Inspector telescope)
-│   ├── public/weights/v3.1-nano/    # the hero Model Capsule (capsule.json + weights.bin + config.json)
+│   ├── public/weights/v3.1-nano/    # the hero Model Capsule (capsule.json + weights.bin) — exactly what ships
 │   └── scripts/export/export_model.py   # checkpoint → versioned Model Capsule
 ├── logs/                    # gitignored — training/eval logs
 └── tmp/                     # gitignored — play_sessions/, scratch

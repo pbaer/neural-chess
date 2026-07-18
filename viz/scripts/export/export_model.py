@@ -5,9 +5,11 @@ version-NEUTRAL: the architecture is described by a `graph` of typed stages, so 
 tool renders whatever it finds.
 
 Output (viz/public/weights/<model_id>/):
-  capsule.json   manifest: capsule_version, arch (display-only), graph[], tensors[] index, sha256
+  capsule.json   manifest: capsule_version, arch (display-only), config, graph[], tensors[] index, sha256
   weights.bin    every tensor concatenated as little-endian float32 (BatchNorm folded)
-  config.json    raw checkpoint config (reference)
+
+The capsule's `config` starts from the raw checkpoint config (provenance) with the
+shape-derived fields overriding it — tensor shapes are the source of truth.
 
 Usage (from repo root, with the venv python):
   .venv/Scripts/python.exe viz/scripts/export/export_model.py \
@@ -155,7 +157,8 @@ def main():
         'capsule_version': CAPSULE_VERSION, 'arch': arch, 'model_id': args.model_id,
         'created': datetime.datetime.now().isoformat(timespec='seconds'),
         'param_count': nominal, 'stored_floats': int(off), 'folded_bn': True,
-        'config': {'d_model': C, 'n_heads': n_heads, 'n_blocks': n_blocks, 'ffn_mult': ffn_mult,
+        'config': {**cfg,
+                   'd_model': C, 'n_heads': n_heads, 'n_blocks': n_blocks, 'ffn_mult': ffn_mult,
                    'stem_kernel': stem_kernel, 'stem_blocks': stem_blocks,
                    'value_hidden': value_hidden, 'geometry_bias': geometry_bias,
                    'input_planes': in_planes},
@@ -164,8 +167,6 @@ def main():
     }
     with open(os.path.join(args.out_dir, 'capsule.json'), 'w') as f:
         json.dump(manifest, f, indent=2)
-    with open(os.path.join(args.out_dir, 'config.json'), 'w') as f:
-        json.dump(cfg, f, indent=2)
     print(f"Model Capsule -> {args.out_dir}")
     print(f"  arch={arch} id={args.model_id} | nominal params={nominal:,} | stored floats={off:,} "
           f"(BN-fold {off - nominal:+d}) | weights.bin {len(raw):,} B | sha {sha[:12]}")

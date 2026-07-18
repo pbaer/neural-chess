@@ -1,5 +1,9 @@
 // Shared parity-test fixtures: load the capsule + golden vectors from disk and
 // expose helpers. Pure Node (fs), no DOM.
+//
+// The capsule (capsule.json + weights.bin) is the SHIPPING artifact and lives in
+// public/weights/; the golden vectors are dev-only test fixtures and live here
+// under tests/parity/fixtures/ (regenerated via scripts/export/gen_golden.py).
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +16,7 @@ import {
 } from '../../src/core/engine/index.ts';
 
 const WEIGHTS_DIR = fileURLToPath(new URL('../../public/weights/v3.1-nano/', import.meta.url));
+const GOLDEN_DIR = fileURLToPath(new URL('./fixtures/v3.1-nano/', import.meta.url));
 
 function readArrayBuffer(path: string): ArrayBuffer {
   const buf = readFileSync(path);
@@ -83,8 +88,8 @@ export function loadEngine(): Engine {
 }
 
 export function loadGolden(): { golden: Golden; tensor: (ref: TensorRef) => Float32Array } {
-  const golden = readJSON<Golden>(WEIGHTS_DIR + 'golden.json');
-  const binBuf = readArrayBuffer(WEIGHTS_DIR + 'golden.bin');
+  const golden = readJSON<Golden>(GOLDEN_DIR + 'golden.json');
+  const binBuf = readArrayBuffer(GOLDEN_DIR + 'golden.bin');
   const all = new Float32Array(binBuf);
   const tensor = (ref: TensorRef): Float32Array => all.subarray(ref.offset, ref.offset + ref.length);
   return { golden, tensor };
