@@ -25,7 +25,7 @@ export function Story() {
           smaller than a single photo on your phone. It never read a chess book, was never told what a good move
           looks like, and was never shown an engine&rsquo;s analysis. It learned the game the way a curious person
           might: by watching millions of human games and trying to guess what comes next. This is the story of how
-          it got built, what worked, and — just as interesting — what didn&rsquo;t.
+          it got built, what worked, and what didn&rsquo;t.
         </p>
 
         <Section title="The question">
@@ -33,7 +33,7 @@ export function Story() {
             Chess engines have crushed the best humans for decades, but they do it with brute force: searching
             millions of positions a second and scoring them with rules people hand-wrote (&ldquo;a rook is worth
             five pawns,&rdquo; &ldquo;control the center,&rdquo; and so on). That&rsquo;s impressive, but it
-            answers a slightly boring question — <em>can a calculator out-calculate a person?</em> Yes; that was
+            answers a slightly boring question: <em>can a calculator out-calculate a person?</em> That was
             settled long ago.
           </p>
           <p>
@@ -44,29 +44,29 @@ export function Story() {
         </Section>
 
         <Section title="The ground rules">
-          <p>To keep the question honest, three principles held the whole way through.</p>
+          <p>Three principles held the whole way through.</p>
           <ol className="story-principles">
             <li>
               <strong>Human games only.</strong> Every example it learns from was played by people. No engine
-              games, no letting the model play itself, no copying a stronger program&rsquo;s judgments.
+              games, no letting the model play itself.
             </li>
             <li>
               <strong>Learn only from what&rsquo;s on the board.</strong> Picture a robot that knows nothing about
               chess, watching games over someone&rsquo;s shoulder. It sees where the pieces are, it sees which
-              move gets played, and it sees who wins. From that — and nothing else — it has to work out what
+              move gets played, and it sees who wins. From that, and nothing else, it has to work out what
               matters. It is never handed &ldquo;material count&rdquo; or &ldquo;king safety.&rdquo; If those
               ideas matter, it has to <em>discover</em> them.
             </li>
             <li>
               <strong>One look, one move.</strong> By default the model glances at the position once and names its
               move — a single pass through the network, no searching ahead. (An optional &ldquo;think harder&rdquo;
-              mode was added later, but even then the only judgment it uses is its own — more on that below.)
+              mode was added later, but even then the only judgment it uses is its own; more on that below.)
             </li>
           </ol>
           <p>
-            These constraints are the whole point. Hand the model a pile of chess wisdom and you only learn how
-            strong a hand-fed model can get — not the interesting question. The point is what it can figure out by
-            watching.
+            These constraints matter. Hand the model a pile of chess wisdom and you only learn how strong a
+            hand-fed model can get, which isn&rsquo;t the interesting question. The point is what it can figure out
+            by watching.
           </p>
         </Section>
 
@@ -77,7 +77,7 @@ export function Story() {
             the knights, and so on, plus a few for things like castling rights and whose turn it is. Everything in
             that input stack is just what you could write down by looking; no judgments, only facts.
           </p>
-          <Figure caption="Every move: the board becomes numbers, flows through the network, and comes out as two things — a ranked list of moves, and a single &ldquo;who&rsquo;s winning&rdquo; score.">
+          <Figure caption="Every move: the board becomes numbers, flows through the network, and comes out as two things: a ranked list of moves, and a single &ldquo;who&rsquo;s winning&rdquo; score.">
             <BoardToMove />
           </Figure>
           <p>
@@ -106,15 +106,15 @@ export function Story() {
             &ldquo;convolutional&rdquo; network, good at spotting local patterns). The first one learned real
             chess — sensible openings, reasonable moves — which was already a small thrill. But it had blind
             spots: drop an unexpected threat in front of it and it would walk right into trouble. So it was made
-            bigger, taught to play both colors, and — importantly — given that second output, the
+            bigger, taught to play both colors, and, importantly, given that second output, the
             who&rsquo;s-winning score, by learning from how each game ended.
           </p>
 
           <Insight kind="fail" label="What didn&rsquo;t work">
             An early attempt built &ldquo;look a few moves ahead&rdquo; directly into the network&rsquo;s wiring.
             It sounded great. It flopped: taking that same budget and just making the plain network <em>bigger</em>{' '}
-            beat it on every measure. The lesson — <strong>don&rsquo;t hand-engineer cleverness the model can learn
-            on its own.</strong> Give it capacity and good signal, and get out of the way.
+            beat it on every measure. The lesson: don&rsquo;t hand-engineer cleverness the model can learn on its
+            own. Give it capacity and good signal, and get out of the way.
           </Insight>
 
           <h3 className="story-h3">A better shape: attention</h3>
@@ -123,15 +123,15 @@ export function Story() {
             language AI. Its key trick is &ldquo;attention&rdquo;: instead of only looking at nearby squares, every
             square can directly consult every other square in a single step. A rook can glance straight down its
             file; a bishop down its diagonal. This matched chess so well that the new model beat a version{' '}
-            <em>twice its size</em> from the previous generation. Smaller and stronger — exactly the direction you
-            want to be moving.
+            <em>twice its size</em> from the previous generation. It ended up smaller and stronger at the same
+            time.
           </p>
 
-          <h3 className="story-h3">The real bottleneck wasn&rsquo;t size — it was signal</h3>
+          <h3 className="story-h3">The real bottleneck was signal, not size</h3>
           <p>
-            Here&rsquo;s where it got interesting. Making the model bigger kept barely moving the needle. Its sense
-            of <em>who&rsquo;s winning</em>, in particular, hit a wall. The problem turned out not to be the model
-            at all — it was the <strong>data</strong>.
+            At some point, making the model bigger barely moved the needle anymore. Its sense
+            of <em>who&rsquo;s winning</em>, in particular, hit a wall. The problem turned out to be
+            the <strong>data</strong>, not the model.
           </p>
           <p>
             Consider how it had been taught: for each position, &ldquo;a human played this one move, and that one
@@ -151,10 +151,9 @@ export function Story() {
           </Insight>
 
           <Insight kind="fail" label="What didn&rsquo;t work">
-            Surely a strong model should train only on the games of the <em>strongest</em> players? Tried — and it
-            was <strong>worse.</strong> The variety in a broad mix of human play — the mistakes and all — carried
-            more useful signal than a narrow diet of master games. Intuition lost to measurement, which happened
-            more than once.
+            Surely a strong model should train only on the games of the <em>strongest</em> players? It turned out
+            to be worse. The variety in a broad mix of human play, mistakes and all, carried more useful signal
+            than a narrow diet of master games. Intuition lost to measurement, which happened more than once.
           </Insight>
 
           <h3 className="story-h3">Shrinking it down so you can see inside</h3>
@@ -189,9 +188,9 @@ export function Story() {
             page, this is the <strong>MCTS</strong> mode and the &ldquo;max simulations&rdquo; slider.)
           </p>
           <Insight kind="fail" label="A counter-intuitive result">
-            You&rsquo;d think a little thinking is always better than none. Not so: with only a handful of trials,
+            You&rsquo;d think a little thinking is always better than none, but with only a handful of trials
             the search is shallow and noisy and actually plays <em>worse</em> than the instant, one-glance move.
-            It takes a real budget of thinking before searching pays off — after which it climbs steadily.
+            It takes a real budget of thinking before searching pays off, after which it climbs steadily.
           </Insight>
 
           <h3 className="story-h3">All on one desktop machine</h3>
@@ -201,8 +200,8 @@ export function Story() {
             GPU card, with 16&nbsp;GB of memory. The largest models took a few hours for each pass through the
             millions of games; the tiny one you&rsquo;re playing trains from scratch in about an hour. A big part
             of the project was finding tricks to make the training fast enough to actually iterate on a setup like
-            that — packing the whole dataset into memory so the graphics card never waits on the disk, for
-            instance — so that trying a new idea took minutes, not days.
+            that (packing the whole dataset into memory so the graphics card never waits on the disk, for
+            instance), so that trying a new idea took minutes rather than days.
           </p>
         </Section>
 
@@ -221,8 +220,8 @@ export function Story() {
           <Figure caption="Where this model lands on the rating ladder — from a casual player up to master strength, depending on how hard it thinks.">
             <EloScale />
           </Figure>
-          <p>And exactly where it lands depends entirely on how hard you let it think:</p>
-          <Figure caption="Estimated strength versus how much the model thinks. Notice the dip at the far left — a tiny bit of search is worse than none — and the steady climb after.">
+          <p>Where it lands depends on how hard you let it think:</p>
+          <Figure caption="Estimated strength versus how much the model thinks. Notice the dip at the far left (a tiny bit of search is worse than none) and the steady climb after.">
             <EloCurve />
           </Figure>
           <p>

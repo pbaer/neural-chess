@@ -83,8 +83,8 @@ export function ModelConfig({ store, state, disabled }: ModelConfigProps) {
       </div>
       <div className="model-config-hint">
         {mctsOn
-          ? 'MCTS (Monte Carlo Tree Search): instead of answering at a glance, the model “thinks ahead”: it plays out many short what-if lines from this position, spending more of them on the moves that look most promising, then plays the move those trials backed up best. The search is steered only by the model’s own move hunches and position scores. No outside chess knowledge is added. It runs up to the simulation cap, but stops early once one move is the clear favorite.'
-          : 'One-Shot: the model looks at the position once and names its move: a single pass through the network, with no looking ahead. Fast, and how the model plays by default.'}
+          ? 'MCTS (Monte Carlo Tree Search): instead of answering at a glance, the model “thinks ahead”. It plays out many short what-if lines from this position, spending more of them on the moves that look most promising, then plays the move those trials backed up best. The search is steered only by the model’s own move hunches and position scores, with no outside chess knowledge added. It runs up to the simulation cap, but stops early once one move is the clear favorite.'
+          : 'One-Shot: the model looks at the position once and names its move in a single pass through the network, with no looking ahead. It’s the pure, fast approach.'}
       </div>
 
       {mctsOn && (
