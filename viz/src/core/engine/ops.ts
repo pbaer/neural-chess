@@ -1,4 +1,5 @@
-// Hand-written tensor ops — the load-bearing arithmetic of the forward pass.
+// The tensor ops — the load-bearing arithmetic of the forward pass, spelled out
+// here rather than delegated to an inference runtime (no ONNX, no BLAS).
 //
 // Parity rules (must match PyTorch exactly enough to pass the golden test):
 //  - Linear weights are stored PyTorch (out,in) row-major: y[o] = Σ_i x[i]·W[o*in+i] + b[o].

@@ -11,7 +11,7 @@ A chess engine trained on a large corpus of human games. **Three architecture ge
 A separate, validated win is the **"tau" data recipe** — a position-aggregated corpus (averaged value + soft-policy move histogram + frequency-tempered sampling) that adds ~+79 Elo at equal params; **`v3-18M-tau` ≈ `v3-37M` at half the parameters**. [Details below](#the-tau-data-recipe-position-aggregated). Naming: `v3-<paramsize>-tau`.
 
 - **v3.1 — a leaner architecture (no conv stem).** Teaching-model work showed the v3 conv stem is droppable: a **pure square-token transformer** (`stem_kernel=1, stem_blocks=0`) is *smaller and stronger* at small scale, and a full ablation pass ("v3.2") confirmed the result is tight — every remaining component is needed. **v3.1 is the validated lean architecture** and the recommended shape for the next big model (`v3.1-37M-tau`). [Details below](#v31--the-lean-no-conv-architecture-teaching-models--true-minimum).
-- **Neural Chess web tool (`viz/`).** A browser app that runs a hand-written TypeScript forward pass of the tiny v3.1 hero and lets you **play** it *and* **inspect** every weight/activation from the architecture diagram down to a single scalar. [Details below](#neural-chess-web-tool-viz) · [viz/README.md](viz/README.md).
+- **Neural Chess web tool (`viz/`).** A browser app that runs the tiny v3.1 hero via an explicit TypeScript forward pass (no ONNX or other inference runtime) and lets you **play** it *and* **inspect** every weight/activation from the architecture diagram down to a single scalar. [Details below](#neural-chess-web-tool-viz) · [viz/README.md](viz/README.md).
 
 All three generations share the same `PolicyEngine` runtime interface so a single `play.py` / `uci.py` works for any; the architecture is auto-detected from the checkpoint.
 
@@ -222,7 +222,7 @@ The result, **`v3.1-clean-distilled`**, is **policy-indistinguishable** from the
 
 ## Neural Chess web tool (`viz/`)
 
-A public, static, **educational** browser app (React + Vite + TypeScript) that runs a **hand-written TypeScript forward pass** (no ONNX; PyTorch-parity-verified, identical argmax) of the tiny 116k v3.1 hero and lets you:
+A public, static, **educational** browser app (React + Vite + TypeScript) that runs an **explicit TypeScript forward pass** (no ONNX or other inference runtime; PyTorch-parity-verified, identical argmax) of the tiny 116k v3.1 hero and lets you:
 - **play** it — either **one-shot** (a single forward pass per move) or with an optional **in-browser PUCT MCTS** ("think harder", default 100 sims with early cutoff on clear positions, configurable up to 300), a value-head readout, and a **move-assistant** that surfaces the model's top suggestions from *your* side. Move variety is **value-adaptive** (a sigmoid of the value head): the model sharpens toward its best move when it judges itself losing and relaxes — more variety, mild novelty — when comfortable, while never playing a move a strong player would avoid. This keeps it fun across opponent strengths. The Model Configuration panel shows a live **estimated Elo** for the current settings (see below).
 - **inspect** it — a "Model Inspector" telescope from the architecture diagram down to individual attention weights tied to the 64 board squares, with contextual explanations, plus a policy-head view (top-N move arrows + piece-to-move board shading).
 

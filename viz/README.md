@@ -11,7 +11,7 @@ Current features: play vs. the 116k v3.1 hero in either **one-shot** (single for
 There's also a **story page** (`story.html` → `src/story/`) — a narrative, general-audience account of the project (principles, the journey, what worked and what didn't, with inline SVG visuals) linked from the main page's subtitle. It's a second Vite entry, so `npm run build` emits both `index.html` and `story.html`.
 
 ## Decisions locked
-- **Inference:** hand-written TypeScript forward pass (no ONNX), in a Web Worker, with a PyTorch parity test (identical argmax move required).
+- **Inference:** explicit TypeScript forward pass (no ONNX or other inference runtime), in a Web Worker, with a PyTorch parity test (identical argmax move required).
 - **Stack:** React + Vite + TypeScript; SVG boards/arrows plus Canvas2D heatmaps (the originally planned WebGL zoom camera was never needed).
 - **Hero model:** the capsule under `public/weights/v3.1-nano/` is **`v3.1-clean-distilled`** — a 116k pure-transformer (no conv stem) net **distilled** from a `v3.1-37M` teacher trained entirely on CC0 Lichess data (policy-equal to the human-trained `v3.1-eq`, much stronger value head → markedly stronger under MCTS). The whole pipeline is license-clean. See the repo README's *Distillation* section.
 - **Search:** in-browser PUCT MCTS is **built** (it was originally a future seam) — uses only the model's own policy priors and value, no chess heuristics (Principle-3 carve-out).

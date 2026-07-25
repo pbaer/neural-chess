@@ -1,4 +1,4 @@
-// Heatmap — a hand-rolled <canvas> matrix renderer (no charting lib). Paints one
+// Heatmap — a custom <canvas> matrix renderer (no charting lib). Paints one
 // cell per matrix entry with the chosen colormap and reports hover cells (so a
 // caller can reach a single scalar). Crisp at any DPR.
 
